@@ -1,0 +1,26 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    // Public, optimized product imagery only. Keep supplier/source assets
+    // in a separate, non-public path (or a separate bucket) that these
+    // rules never grant read on.
+    match /products/{productId}/{fileName} {
+      allow read: if true;
+      // Only an explicitly promoted admin can update display images. The
+      // browser uploader also limits files to 8 MB; rules enforce it too.
+      allow write: if isAdmin()
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    // products/{productId} — public catalog, admin-managed.
+    // Evaluated per-document for both get and list, so a list query only
+    // ever returns documents the caller is allowed to see.
+    match /products/{productId} {
+      allow read: if resource.data.active == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // carts/{uid} — owner-only, device-scoped guest or signed-in cart.
+    match /carts/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+
+      // The rules language has no loop/map construct, so per-line field
+      // and quantity-cap validation can't be expressed here — only the
+      // top-level shape is enforced. createCheckout is the authority: it
+      // re-reads canonical product/variant price and availability from
+      // Firestore and ignores any client-supplied price or quantity that
+      // doesn't hold up, per the contract's "server enforces stock" rule.
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['lines', 'updatedAt'])
+        && request.resource.data.lines is list
+        && request.resource.data.lines.size() <= 50;
+    }
+
+    // orders/{orderId} — server-created only (Cloud Functions via Admin SDK).
+    // Status/fulfillment changes go through the updateOrderStatus callable,
+    // not a direct write, so the state machine is validated in one place.
+    match /orders/{orderId} {
+      allow read: if (request.auth != null && request.auth.uid == resource.data.buyerUid) || isAdmin();
+      allow write: if false;
+    }
+
+    // customers/{customerId} — admin-only. Contains business data
+    // (totalSpent, notes) never exposed to the customer it describes; a
+    // wholesale buyer's own history is read through orders instead.
+    match /customers/{customerId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

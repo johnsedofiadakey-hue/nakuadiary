@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nakuadiary — redesign directions</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="gallery-head"><a href="#top">NAKUADIARY</a><p>Three new directions — choose the energy, not the details.</p><span>01 / 03</span></header>
+    <main id="top">
+      <section class="concept concept-gloss" aria-labelledby="gloss-title">
+        <div class="concept-label"><p>Direction 01</p><p>Gloss Theory</p></div>
+        <nav><span>Wigs</span><span>Bundles</span><span>Extensions</span><button data-choice="Gloss Theory">Choose this direction ↗</button></nav>
+        <div class="gloss-copy"><p class="kicker">Nakuadiary presents</p><h1 id="gloss-title">HAIR<br>WITH<br><em>HEAT.</em></h1><p class="body-copy">High-gloss texture. A hot, expressive storefront where every piece feels like a campaign moment.</p><a href="#gloss-shop">Shop the drop <b>↓</b></a></div>
+        <div class="gloss-orb" aria-hidden="true"></div><img class="product-object" src="../dist/assets/hero-wig.png" alt="Long body-wave wig" />
+        <p class="side-type">SHEEN / MOVEMENT / PRESENCE</p>
+        <div class="gloss-footer" id="gloss-shop"><span>DROP 01 — UNFILTERED</span><span>SCROLL TO ENTER</span><span>✦</span></div>
+      </section>
+
+      <section class="concept concept-chrome" aria-labelledby="chrome-title">
+        <div class="chrome-top"><p>NAKUADIARY / STUDIO</p><button data-choice="Liquid Chrome">Choose this direction ↗</button><p>BAG (0)</p></div>
+        <div class="chrome-stack"><p>NEW STANDARD</p><p>NEW STANDARD</p><p>NEW STANDARD</p></div>
+        <div class="chrome-main"><div><p class="kicker">Direction 02 — Liquid Chrome</p><h1 id="chrome-title">THE<br>FINISH<br>LINE.</h1><p>Precision, polish, and dimensional shine. Luxury with the energy of a magazine cover.</p></div><div class="chrome-product"><span>24”</span><img src="../dist/assets/hero-wig.png" alt="Long glossy wig" /><span>HD LACE</span></div></div>
+        <div class="chrome-ticker">RAW HAIR <i>✳</i> NO COMPROMISE <i>✳</i> RAW HAIR <i>✳</i> NO COMPROMISE <i>✳</i> RAW HAIR <i>✳</i></div>
+      </section>
+
+      <section class="concept concept-night" aria-labelledby="night-title">
+        <div class="night-nav"><a href="#top">N.</a><div><span>Collection</span><span>Journal</span><span>About</span></div><button data-choice="After Dark">Choose this direction ↗</button></div>
+        <div class="night-moon" aria-hidden="true"></div><p class="night-number">03</p><div class="night-copy"><p class="kicker">Direction 03 — After Dark</p><h1 id="night-title">SOFT<br>POWER.</h1><p>Dark, intimate and intentionally feminine. An editorial universe for hair that changes the way a room reads you.</p><a href="#top">Enter the night <b>↘</b></a></div><img class="night-object" src="../dist/assets/hero-wig.png" alt="Long body-wave wig" />
+        <p class="night-caption">Nakuadiary — made to be noticed</p>
+      </section>
+    </main>
+    <div class="choice-toast" role="status" aria-live="polite"></div>
+    <script>
+      const requestedConcept = new URLSearchParams(location.search).get('concept');
+      if (requestedConcept) {
+        document.querySelectorAll('.concept').forEach(section => {
+          section.hidden = !section.classList.contains(`concept-${requestedConcept}`);
+        });
+      }
+      document.querySelectorAll('[data-choice]').forEach(button => button.addEventListener('click', () => {
+        const toast = document.querySelector('.choice-toast'); toast.textContent = `${button.dataset.choice} selected — tell me and I’ll build this direction.`; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 3000);
+      }));
+    </script>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "name": "nakuadiary-functions",
+  "description": "Cloud Functions backing the Nakuadiary storefront: guest cart checkout via Paystack and order fulfillment.",
+  "private": true,
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "scripts": {
+    "seed": "node seed.js",
+    "create-admin": "node create-admin.js",
+    "serve": "firebase emulators:start --only functions,firestore",
+    "shell": "firebase functions:shell",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^5.1.1"
+  }
+}

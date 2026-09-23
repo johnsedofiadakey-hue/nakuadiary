@@ -1,0 +1,12 @@
+{
+  "name": "Nakuadiary",
+  "short_name": "Nakuadiary",
+  "description": "Human hair wigs, bundles, extensions and accessories in Ghana.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdf8f4",
+  "theme_color": "#fbe4ea",
+  "icons": [
+    { "src": "/assets/nakuadiary-favicon.png", "sizes": "180x180", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
