@@ -1,5 +1,7 @@
-import * as adminStore from './admin-store.js';
-import { slugify, CATEGORIES } from './admin-store.js';
+import * as adminStore from './admin-store.js?v=2';
+import { slugify, CATEGORIES } from './admin-store.js?v=2';
+import { homepageViewHtml, settingsViewHtml, collectCmsForm, validateCms, setImageField } from './cms.js?v=2';
+import { DEFAULT_HOME, DEFAULT_SETTINGS, escapeHtml as esc } from '/js/site-content.js?v=2';
 
 const root = document.querySelector('#admin-app');
 root.innerHTML = '<p class="muted" style="padding:2rem">Loading…</p>';
@@ -16,6 +18,11 @@ let productsCache = [];
 let ordersCache = [];
 let customersCache = [];
 let orderStatusFilter = 'all';
+// CMS editor state: the doc as last loaded/saved, whether the form has
+// unsaved edits, and how many photo uploads are still in flight.
+let cmsDoc = null;
+let cmsDirty = false;
+let cmsUploads = 0;
 
 function toast(text) {
   const node = document.querySelector('[data-toast]');
@@ -37,7 +44,7 @@ function renderRoot() {
     return;
   }
   if (!session.isAdmin) {
-    root.innerHTML = `<div class="login-screen"><div class="login-card not-authorized"><h1>Not authorized</h1><p>${session.user.email} doesn't have admin access on this project.</p><button class="btn" type="button" data-sign-out>Sign out</button></div></div>`;
+    root.innerHTML = `<div class="login-screen"><div class="login-card not-authorized"><h1>Not authorized</h1><p>${esc(session.user.email)} doesn't have admin access on this project.</p><button class="btn" type="button" data-sign-out>Sign out</button></div></div>`;
     return;
   }
   root.innerHTML = shellHtml();
@@ -82,8 +89,11 @@ function shellHtml() {
         <button type="button" data-view="products" class="${currentView === 'products' ? 'is-active' : ''}">Products</button>
         <button type="button" data-view="orders" class="${currentView === 'orders' ? 'is-active' : ''}">Orders</button>
         <button type="button" data-view="customers" class="${currentView === 'customers' ? 'is-active' : ''}">Customers</button>
+        <span class="admin-nav-label">Website</span>
+        <button type="button" data-view="homepage" class="${currentView === 'homepage' ? 'is-active' : ''}">Homepage</button>
+        <button type="button" data-view="settings" class="${currentView === 'settings' ? 'is-active' : ''}">Settings</button>
       </nav>
-      <div class="signed-in-as">${session.user.email}<button type="button" data-sign-out>Sign out</button></div>
+      <div class="signed-in-as">${esc(session.user.email)}<button type="button" data-sign-out>Sign out</button></div>
     </aside>
     <main class="admin-main" data-main></main>
   </div>
@@ -93,6 +103,7 @@ function shellHtml() {
 
 async function loadAndRenderView(view) {
   currentView = view;
+  cmsDirty = false; cmsDoc = null;
   document.querySelectorAll('[data-view]').forEach((btn) => btn.classList.toggle('is-active', btn.dataset.view === view));
   const main = document.querySelector('[data-main]');
   main.innerHTML = '<p class="muted">Loading…</p>';
@@ -100,8 +111,10 @@ async function loadAndRenderView(view) {
     if (view === 'products') { productsCache = await adminStore.listProducts(); main.innerHTML = productsViewHtml(); }
     if (view === 'orders') { ordersCache = await adminStore.listOrders(); main.innerHTML = ordersViewHtml(); }
     if (view === 'customers') { customersCache = await adminStore.listCustomers(); main.innerHTML = customersViewHtml(); }
+    if (view === 'homepage') { cmsDoc = await adminStore.getSiteDoc('home', DEFAULT_HOME); main.innerHTML = homepageViewHtml(cmsDoc); wireCmsForm(); }
+    if (view === 'settings') { cmsDoc = await adminStore.getSiteDoc('settings', DEFAULT_SETTINGS); main.innerHTML = settingsViewHtml(cmsDoc); wireCmsForm(); }
   } catch (err) {
-    main.innerHTML = `<p class="form-error">Could not load ${view}: ${err?.message || err}</p>`;
+    main.innerHTML = `<p class="form-error">Could not load ${view}: ${esc(err?.message || err)}</p>`;
   }
 }
 
@@ -115,20 +128,20 @@ function productsViewHtml() {
 }
 function productRow(p) {
   const stockTotal = totalStock(p);
-  return `<tr><td>${p.name}</td><td class="muted">${p.category}</td><td>${money(p.price)}</td><td>${typeof p.wholesalePrice === 'number' ? money(p.wholesalePrice) : '—'}</td><td class="${stockTotal <= 5 ? 'low-stock' : ''}">${stockTotal}</td><td><span class="badge ${p.active !== false ? 'status-paid' : 'status-inactive'}">${p.active !== false ? 'Active' : 'Inactive'}</span></td><td><button class="btn secondary" type="button" data-edit-product="${p.id}">Edit</button></td></tr>`;
+  return `<tr><td>${esc(p.name)}</td><td class="muted">${esc(p.category)}</td><td>${money(p.price)}</td><td>${typeof p.wholesalePrice === 'number' ? money(p.wholesalePrice) : '—'}</td><td class="${stockTotal <= 5 ? 'low-stock' : ''}">${esc(stockTotal)}</td><td><span class="badge ${p.active !== false ? 'status-paid' : 'status-inactive'}">${p.active !== false ? 'Active' : 'Inactive'}</span></td><td><button class="btn secondary" type="button" data-edit-product="${esc(p.id)}">Edit</button></td></tr>`;
 }
 
 function variantRowHtml(v = {}) {
   return `<div class="variant-row">
     <button type="button" class="remove-variant" data-remove-variant>Remove</button>
-    <input type="hidden" data-field="id" value="${v.id || ''}" />
+    <input type="hidden" data-field="id" value="${esc(v.id)}" />
     <div class="field-row">
-      <label class="field">Label<input data-field="label" value="${v.label || ''}" required /></label>
-      <label class="field">Stock<input data-field="stock" type="number" min="0" value="${v.stock ?? 0}" required /></label>
+      <label class="field">Label<input data-field="label" value="${esc(v.label)}" required /></label>
+      <label class="field">Stock<input data-field="stock" type="number" min="0" value="${esc(v.stock ?? 0)}" required /></label>
     </div>
     <div class="field-row">
-      <label class="field">Retail price override<input data-field="price" type="number" min="0" step="0.01" value="${v.price ?? ''}" placeholder="Uses product price" /></label>
-      <label class="field">Wholesale price override<input data-field="wholesalePrice" type="number" min="0" step="0.01" value="${v.wholesalePrice ?? ''}" placeholder="Uses product wholesale price" /></label>
+      <label class="field">Retail price override<input data-field="price" type="number" min="0" step="0.01" value="${esc(v.price)}" placeholder="Uses product price" /></label>
+      <label class="field">Wholesale price override<input data-field="wholesalePrice" type="number" min="0" step="0.01" value="${esc(v.wholesalePrice)}" placeholder="Uses product wholesale price" /></label>
     </div>
     <label class="field checkbox"><input data-field="available" type="checkbox" ${v.available !== false ? 'checked' : ''} /> Available</label>
   </div>`;
@@ -140,7 +153,7 @@ function normaliseImages(product = {}) {
 }
 
 function galleryEditorHtml(images) {
-  return `<div class="image-editor" data-image-editor>${images.length ? images.map((image, index) => `<article class="image-editor-card"><img src="${image.url}" alt="${image.alt || ''}" /><div><strong>${index === 0 ? 'Cover photo' : `Photo ${index + 1}`}</strong><button type="button" data-remove-image="${index}">Remove</button></div></article>`).join('') : '<p class="muted image-empty">Add at least one photo. The first one becomes the shop cover.</p>'}</div>`;
+  return `<div class="image-editor" data-image-editor>${images.length ? images.map((image, index) => `<article class="image-editor-card"><img src="${esc(image.url)}" alt="${esc(image.alt)}" /><div><strong>${index === 0 ? 'Cover photo' : `Photo ${index + 1}`}</strong><button type="button" data-remove-image="${index}">Remove</button></div></article>`).join('') : '<p class="muted image-empty">Add at least one photo. The first one becomes the shop cover.</p>'}</div>`;
 }
 
 function productDrawerHtml(product, isNew) {
@@ -149,27 +162,27 @@ function productDrawerHtml(product, isNew) {
   return `<div class="drawer" data-product-drawer>
     <div class="drawer-head"><h2>${isNew ? 'Add product' : 'Edit product'}</h2><button type="button" data-close-product aria-label="Close">×</button></div>
     <form data-product-form>
-      <label class="field">Name<input name="name" value="${p.name || ''}" required /></label>
-      ${!isNew ? `<p class="muted" style="margin:-.5rem 0 1rem">ID: ${p.id}</p>` : ''}
+      <label class="field">Name<input name="name" value="${esc(p.name)}" required /></label>
+      ${!isNew ? `<p class="muted" style="margin:-.5rem 0 1rem">ID: ${esc(p.id)}</p>` : ''}
       <div class="field-row">
         <label class="field">Category<select name="category" required>${CATEGORIES.map((c) => `<option value="${c}" ${p.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
-        <label class="field">Type<input name="type" value="${p.type || ''}" placeholder="e.g. HD lace wig" /></label>
+        <label class="field">Type<input name="type" value="${esc(p.type)}" placeholder="e.g. HD lace wig" /></label>
       </div>
       <div class="field-row">
-        <label class="field">Retail price (GHS)<input name="price" type="number" min="0" step="0.01" value="${p.price ?? ''}" required /></label>
-        <label class="field">Wholesale price (GHS)<input name="wholesalePrice" type="number" min="0" step="0.01" value="${p.wholesalePrice ?? ''}" placeholder="Optional" /></label>
+        <label class="field">Retail price (GHS)<input name="price" type="number" min="0" step="0.01" value="${esc(p.price)}" required /></label>
+        <label class="field">Wholesale price (GHS)<input name="wholesalePrice" type="number" min="0" step="0.01" value="${esc(p.wholesalePrice)}" placeholder="Optional" /></label>
       </div>
-      <label class="field">Minimum wholesale quantity<input name="minWholesaleQty" type="number" min="1" value="${p.minWholesaleQty ?? 1}" /></label>
-      <label class="field">Description<textarea name="description" rows="2" required>${p.description || ''}</textarea></label>
-      <label class="field">Details (one per line)<textarea name="details" rows="3">${(p.details || []).join('\n')}</textarea></label>
+      <label class="field">Minimum wholesale quantity<input name="minWholesaleQty" type="number" min="1" value="${esc(p.minWholesaleQty ?? 1)}" /></label>
+      <label class="field">Description<textarea name="description" rows="2" required>${esc(p.description)}</textarea></label>
+      <label class="field">Details (one per line)<textarea name="details" rows="3">${esc((p.details || []).join('\n'))}</textarea></label>
       <fieldset class="product-images"><legend>Product photos</legend>
-        <p class="muted image-help">Upload JPG, PNG, or WebP below 8 MB. The first photo is the cover shoppers see in the collection.</p>
+        <p class="muted image-help">Upload straight from your phone or computer — large photos are resized automatically. The first photo is the cover shoppers see in the collection.</p>
         ${galleryEditorHtml(images)}
         <label class="field">Photo description (optional)<input data-image-alt placeholder="e.g. 22-inch deep-curly wig, front view" /></label>
-        <label class="image-upload"><span>Upload from phone or computer</span><input type="file" data-product-image-upload accept="image/jpeg,image/png,image/webp" /><small data-image-upload-status></small></label>
+        <label class="image-upload"><span>Upload from phone or computer</span><input type="file" data-product-image-upload accept="image/*" /><small data-image-upload-status></small></label>
         <div class="image-url-row"><input type="url" data-product-image-url placeholder="Or paste an image URL" /><button type="button" class="btn secondary" data-add-image-url>Add photo</button></div>
       </fieldset>
-      <label class="field">Badges (comma separated)<input name="badges" value="${(p.badges || []).join(', ')}" /></label>
+      <label class="field">Badges (comma separated)<input name="badges" value="${esc((p.badges || []).join(', '))}" /></label>
       <div class="field-row">
         <label class="field checkbox"><input name="featured" type="checkbox" ${p.featured ? 'checked' : ''} /> Featured</label>
         <label class="field checkbox"><input name="active" type="checkbox" ${p.active !== false ? 'checked' : ''} /> Active (visible to shoppers)</label>
@@ -179,7 +192,7 @@ function productDrawerHtml(product, isNew) {
       <p class="form-error" data-product-error></p>
       <div class="status-actions">
         <button class="btn" type="submit">${isNew ? 'Create product' : 'Save changes'}</button>
-        ${!isNew ? `<button type="button" class="btn secondary" data-toggle-active="${p.id}">${p.active !== false ? 'Deactivate' : 'Reactivate'}</button>` : ''}
+        ${!isNew ? `<button type="button" class="btn secondary" data-toggle-active="${esc(p.id)}">${p.active !== false ? 'Deactivate' : 'Reactivate'}</button>` : ''}
       </div>
     </form>
   </div>`;
@@ -300,17 +313,21 @@ function ordersViewHtml() {
   ${filtered.length ? `<table class="data-table"><thead><tr><th>Date</th><th>Customer</th><th>Account</th><th>Subtotal</th><th>Payment</th><th>Fulfillment</th><th></th></tr></thead><tbody>${filtered.map(orderRow).join('')}</tbody></table>` : '<p class="empty-state">No orders in this view.</p>'}`;
 }
 function orderRow(o) {
-  return `<tr><td class="muted">${formatDate(o.createdAt)}</td><td>${o.customer?.name || '—'}<br><span class="muted">${o.customer?.phone || ''}</span></td><td><span class="badge account-${o.accountType}">${o.accountType}</span></td><td>${money(o.subtotal)}</td><td><span class="badge status-${o.paymentStatus}">${o.paymentStatus}</span></td><td><span class="badge status-${o.fulfillmentStatus}">${o.fulfillmentStatus}</span></td><td><button class="btn secondary" type="button" data-view-order="${o.id}">View</button></td></tr>`;
+  return `<tr><td class="muted">${formatDate(o.createdAt)}</td><td>${esc(o.customer?.name || '—')}<br><span class="muted">${esc(o.customer?.phone)}</span></td><td><span class="badge account-${esc(o.accountType)}">${esc(o.accountType)}</span></td><td>${money(o.subtotal)}</td><td><span class="badge status-${esc(o.paymentStatus)}">${esc(o.paymentStatus)}</span></td><td><span class="badge status-${esc(o.fulfillmentStatus)}">${esc(o.fulfillmentStatus)}</span></td><td><button class="btn secondary" type="button" data-view-order="${esc(o.id)}">View</button></td></tr>`;
 }
 
 function orderDrawerHtml(order) {
   const allowedNext = ALLOWED_NEXT_STATUS[order.fulfillmentStatus] || [];
+  const payment = order.payment || { provider: 'paystack', reference: order.id, status: order.paymentStatus };
+  const history = order.statusHistory || [{ status: order.fulfillmentStatus, source: 'system' }];
   return `<div class="drawer" data-order-drawer>
-    <div class="drawer-head"><h2>Order ${order.id.slice(0, 8)}</h2><button type="button" data-close-order aria-label="Close">×</button></div>
-    <p><span class="badge status-${order.paymentStatus}">${order.paymentStatus}</span> <span class="badge status-${order.fulfillmentStatus}">${order.fulfillmentStatus}</span> <span class="badge account-${order.accountType}">${order.accountType}</span></p>
+    <div class="drawer-head"><h2>Order ${esc(order.id.slice(0, 8))}</h2><button type="button" data-close-order aria-label="Close">×</button></div>
+    <p><span class="badge status-${esc(order.paymentStatus)}">${esc(order.paymentStatus)}</span> <span class="badge status-${esc(order.fulfillmentStatus)}">${esc(order.fulfillmentStatus)}</span> <span class="badge account-${esc(order.accountType)}">${esc(order.accountType)}</span></p>
     <p class="muted">${formatDate(order.createdAt)}</p>
-    <fieldset><legend>Customer</legend><p><strong>${order.customer?.name}</strong><br>${order.customer?.phone}</p><p>${order.customer?.deliveryPreference}${order.customer?.deliveryAddress ? ` — ${order.customer.deliveryAddress}` : ''}</p></fieldset>
-    <fieldset><legend>Items</legend><div class="order-lines">${order.lines.map((l) => `<div><span>${l.title} × ${l.quantity}</span><span>${money(l.unitPrice * l.quantity)}</span></div>`).join('')}<div><strong>Subtotal</strong><strong>${money(order.subtotal)}</strong></div></div></fieldset>
+    <fieldset><legend>Customer</legend><p><strong>${esc(order.customer?.name)}</strong><br>${esc(order.customer?.phone)}</p><p>${esc(order.customer?.deliveryPreference)}${order.customer?.deliveryAddress ? ` — ${esc(order.customer.deliveryAddress)}` : ''}</p></fieldset>
+    <fieldset><legend>Payment confirmation</legend><dl class="order-payment"><div><dt>Provider</dt><dd>${esc(payment.provider || 'Paystack')}</dd></div><div><dt>Reference</dt><dd>${esc(payment.reference || order.id)}</dd></div><div><dt>Status</dt><dd>${esc(payment.status || order.paymentStatus)}</dd></div>${payment.channel ? `<div><dt>Method</dt><dd>${esc(payment.channel)}</dd></div>` : ''}${payment.paidAt ? `<div><dt>Confirmed</dt><dd>${esc(payment.paidAt)}</dd></div>` : ''}</dl></fieldset>
+    <fieldset><legend>Items</legend><div class="order-lines">${order.lines.map((l) => `<div class="order-line-item">${l.image ? `<img src="${esc(l.image)}" alt="" />` : ''}<span>${esc(l.title)} × ${esc(l.quantity)}</span><strong>${money(l.unitPrice * l.quantity)}</strong></div>`).join('')}<div><strong>Subtotal</strong><strong>${money(order.subtotal)}</strong></div></div></fieldset>
+    <fieldset><legend>Order timeline</legend><ol class="order-timeline">${history.map((entry) => `<li><strong>${esc(entry.status)}</strong><span>${entry.at ? new Date(entry.at).toLocaleString('en-GB') : ''} · ${esc(entry.source || 'system')}</span></li>`).join('')}</ol></fieldset>
     ${allowedNext.length ? `<div class="status-actions">${allowedNext.map((s) => `<button class="btn ${s === 'cancelled' ? 'danger' : ''}" type="button" data-set-status="${s}">Mark ${s}</button>`).join('')}</div>` : '<p class="muted">No further status changes available.</p>'}
     <p class="form-error" data-order-error></p>
   </div>`;
@@ -343,7 +360,7 @@ function customersViewHtml() {
   ${customersCache.length ? `<table class="data-table"><thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Account</th><th>Orders</th><th>Total spent</th></tr></thead><tbody>${customersCache.map(customerRow).join('')}</tbody></table>` : '<p class="empty-state">No customers yet.</p>'}`;
 }
 function customerRow(c) {
-  return `<tr><td>${c.name}</td><td>${c.phone}</td><td class="muted">${c.email || '—'}</td><td><span class="badge account-${c.accountType}">${c.accountType}</span></td><td>${c.orderCount || 0}</td><td>${money(c.totalSpent)}</td></tr>`;
+  return `<tr><td>${esc(c.name)}</td><td>${esc(c.phone)}</td><td class="muted">${esc(c.email || '—')}</td><td><span class="badge account-${esc(c.accountType)}">${esc(c.accountType)}</span></td><td>${esc(c.orderCount || 0)}</td><td>${money(c.totalSpent)}</td></tr>`;
 }
 
 function wholesaleDrawerHtml() {
@@ -371,7 +388,7 @@ function openWholesaleDrawer() {
     try {
       const result = await adminStore.createWholesaleAccount({ name: form.get('name'), phone: form.get('phone'), email: form.get('email') });
       event.currentTarget.hidden = true;
-      document.querySelector('[data-wholesale-result]').innerHTML = `<div class="temp-password">Temporary password — share this with the customer directly (WhatsApp/SMS). It will not be shown again.<code>${result.temporaryPassword}</code></div>`;
+      document.querySelector('[data-wholesale-result]').innerHTML = `<div class="temp-password">Temporary password — share this with the customer directly (WhatsApp/SMS). It will not be shown again.<code>${esc(result.temporaryPassword)}</code></div>`;
       toast('Wholesale account created.');
       customersCache = await adminStore.listCustomers();
       if (currentView === 'customers') document.querySelector('[data-main]').innerHTML = customersViewHtml();
@@ -382,13 +399,104 @@ function openWholesaleDrawer() {
   });
 }
 
+// ---- Website (Homepage + Settings CMS) ---------------------------------------
+
+function setCmsDirty(dirty) {
+  cmsDirty = dirty;
+  const state = document.querySelector('[data-cms-state]');
+  if (!state) return;
+  state.textContent = cmsUploads ? 'Uploading photo…' : dirty ? 'Unsaved changes' : 'All changes saved';
+  state.classList.toggle('is-dirty', dirty || cmsUploads > 0);
+}
+
+function wireCmsForm() {
+  const form = document.querySelector('[data-cms-form]');
+  const kind = form.dataset.cmsForm;
+  setCmsDirty(false);
+
+  form.addEventListener('input', (event) => {
+    if (event.target.type === 'file') return;
+    if (event.target.type === 'color') event.target.closest('.colour-field').querySelector('[data-colour-value]').textContent = event.target.value;
+    setCmsDirty(true);
+  });
+  form.addEventListener('change', (event) => { if (event.target.dataset.kind === 'bool') setCmsDirty(true); });
+
+  form.addEventListener('click', (event) => {
+    const clear = event.target.closest('[data-cms-clear]');
+    if (clear) {
+      const container = clear.closest('[data-cms-image]');
+      setImageField(container, container.dataset.defaultUrl || '');
+      container.querySelector('[data-cms-status]').textContent = container.dataset.defaultUrl ? 'Using the default photo.' : 'Photo removed.';
+      return setCmsDirty(true);
+    }
+    const resetColour = event.target.closest('[data-colour-reset]');
+    if (resetColour) {
+      const input = resetColour.closest('.colour-field').querySelector('input[type="color"]');
+      input.value = resetColour.dataset.colourReset;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+
+  form.addEventListener('change', async (event) => {
+    const input = event.target.closest('[data-cms-upload]');
+    if (!input?.files?.[0]) return;
+    const container = input.closest('[data-cms-image]');
+    const status = container.querySelector('[data-cms-status]');
+    status.textContent = 'Uploading…'; input.disabled = true; cmsUploads += 1; setCmsDirty(cmsDirty);
+    try {
+      const url = await adminStore.uploadSiteImage({ file: input.files[0] });
+      setImageField(container, url);
+      status.textContent = 'Uploaded — save to publish.';
+      cmsUploads -= 1; setCmsDirty(true);
+    } catch (err) {
+      status.textContent = err?.message || 'Upload failed.';
+      cmsUploads -= 1; setCmsDirty(cmsDirty);
+    } finally {
+      input.value = ''; input.disabled = false;
+    }
+  });
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const errorEl = form.querySelector('[data-cms-error]');
+    const submit = form.querySelector('[data-cms-save]');
+    errorEl.textContent = '';
+    if (cmsUploads) return toast('Wait for the photo upload to finish.');
+    const data = collectCmsForm(form, cmsDoc);
+    const problem = validateCms(kind, data);
+    if (problem) { errorEl.textContent = problem; return toast(problem); }
+    submit.disabled = true; submit.textContent = 'Saving…';
+    try {
+      await adminStore.saveSiteDoc(kind, data);
+      cmsDoc = data;
+      setCmsDirty(false);
+      toast(kind === 'home' ? 'Homepage published.' : 'Settings saved.');
+    } catch (err) {
+      errorEl.textContent = err?.message || 'Could not save.';
+    } finally {
+      submit.disabled = false; submit.textContent = 'Save changes';
+    }
+  });
+}
+
+window.addEventListener('beforeunload', (event) => {
+  if (cmsDirty || cmsUploads) { event.preventDefault(); event.returnValue = ''; }
+});
+
 // ---- Global event delegation ----------------------------------------------
 
 document.addEventListener('click', async (event) => {
   const view = event.target.closest('[data-view]');
-  if (view) return loadAndRenderView(view.dataset.view);
+  if (view) {
+    if ((cmsDirty || cmsUploads) && !window.confirm('You have unsaved changes. Leave without saving?')) return;
+    return loadAndRenderView(view.dataset.view);
+  }
 
-  if (event.target.closest('[data-sign-out]')) return adminStore.signOutAdmin();
+  if (event.target.closest('[data-sign-out]')) {
+    if ((cmsDirty || cmsUploads) && !window.confirm('You have unsaved changes. Sign out without saving?')) return;
+    cmsDirty = false;
+    return adminStore.signOutAdmin();
+  }
 
   if (event.target.closest('[data-new-product]')) return openProductDrawer(null, true);
   const editProduct = event.target.closest('[data-edit-product]');

@@ -12,7 +12,7 @@ Serve `dist/` with any static server. For example: `npx serve dist`.
 2. Run `firebase use <project-id>` in this folder.
 3. Run `firebase deploy --only hosting`.
 
-The hosting configuration sends client-side paths to `dist/index.html`, sets clean URLs, and caches versioned static assets efficiently. `firebase deploy --only hosting` deploys the static frontend alone; it never touches Firestore/Storage rules or Functions.
+The hosting configuration sends client-side paths to `dist/index.html` and sets clean URLs. Pages, JS and CSS are served `no-cache` (browsers revalidate on every load and get a cheap 304 when nothing changed), so a deploy reaches every visitor immediately; `/assets` images cache for a day. File names aren't content-hashed, so never switch JS/CSS back to a long `max-age`/`immutable` without adding versioned URLs — the `?v=2` on every script/stylesheet reference exists only to escape an earlier year-long `immutable` cache. `firebase deploy --only hosting` deploys the static frontend alone; it never touches Firestore/Storage rules or Functions.
 
 ## What is included
 
@@ -27,7 +27,7 @@ The hosting configuration sends client-side paths to `dist/index.html`, sets cle
 
 Every page (`dist/index.html`, `dist/shop.html`, `dist/product.html`, `dist/wholesale.html`) is a thin static shell — a `<div id="app">` plus a `data-page` attribute on `<body>`. All markup, including the shared header/footer/cart/dialogs, is rendered by the one shared `dist/js/app.js`, which branches on `data-page`. Internal links use the clean-URL form (`/shop`, not `/shop.html`) so a `.html`-stripping redirect (Firebase Hosting's `cleanUrls`, and `serve`'s equivalent) never has a chance to drop a query string like `?id=`.
 
-Before going live, replace the placeholder WhatsApp number in `dist/js/app.js` (`WHATSAPP_NUMBER`) and the `hello@example.com` placeholder email used for the newsletter and wholesale-enquiry links.
+Before going live, set the real WhatsApp number and contact email in `/admin` → **Settings** — until then the storefront uses the placeholders in `dist/js/site-content.js` (`233200000000`, `hello@example.com`).
 
 ## Backend setup (Firebase)
 
@@ -40,7 +40,7 @@ The backend lives alongside the frontend: `firestore.rules`, `storage.rules`, an
 5. `cd functions && npm install`
 6. Seed the starter catalog: `node seed.js` (needs `gcloud auth application-default login` once, or `GOOGLE_APPLICATION_CREDENTIALS` pointing at a service account key).
 7. Bootstrap your own admin account: `ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=... node create-admin.js`. There's no self-serve way to become an admin after this — it's the one manual step.
-8. `firebase deploy --only firestore:rules,storage:rules,functions`
+8. `firebase deploy --only firestore:rules,storage,functions`
 9. In your Paystack dashboard, add a webhook pointing at the deployed `paystackWebhook` function URL (printed by the deploy command).
 10. Deploy the frontend: `firebase deploy --only hosting`.
 
@@ -53,6 +53,8 @@ Visit `/admin` on your deployed site (or `http://localhost:PORT/admin` locally) 
 - **Products** — add/edit the catalog, including per-variant stock counts, retail and wholesale prices, a minimum wholesale quantity, and a photo gallery. Upload JPG, PNG, or WebP product photos below 8 MB directly from the device; the first photo is the storefront cover. Deactivating a product hides it from the storefront without deleting its order history.
 - **Orders** — see every order, filter by fulfillment status, and move it through `unfulfilled → processing → fulfilled` (or `cancelled`).
 - **Customers** — a running list built automatically from checkout (retail, keyed by phone) and wholesale accounts you create here. Creating a wholesale account shows a one-time temporary password to relay to the customer yourself (WhatsApp/SMS) — the system never emails or stores it.
+- **Homepage** — edit every piece of homepage text, upload the hero photo, floating logo card and optional category-tile photos straight from your phone or computer, and show/hide each section. Changes go live on save.
+- **Settings** — business name and logo, WhatsApp number and contact email (used by every WhatsApp/email button), social links, an announcement bar, the bag's delivery note, footer options, brand colours, and the homepage's Google/share title, description and image.
 
 ## For Claude: backend contract
 

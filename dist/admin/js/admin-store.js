@@ -1,4 +1,5 @@
-import { firebaseConfig, isFirebaseConfigured } from '/js/firebase-config.js';
+import { firebaseConfig, isFirebaseConfigured } from '/js/firebase-config.js?v=2';
+import { mergeContent } from '/js/site-content.js?v=2';
 
 const FUNCTIONS_REGION = 'us-central1';
 const SDK = 'https://www.gstatic.com/firebasejs/12.19.0';
@@ -95,21 +96,90 @@ export async function setProductActive(id, active) {
   await fsMod.updateDoc(fsMod.doc(db, 'products', id), { active, updatedAt: fsMod.serverTimestamp() });
 }
 
-/** Uploads a public-facing product photo. Storage rules require `admin: true`
- * on the signed-in user's custom claims; public visitors cannot upload files. */
-export async function uploadProductImage({ file, productId }) {
+// ---- Image uploads ---------------------------------------------------------
+
+const MAX_SOURCE_BYTES = 25 * 1024 * 1024; // raw phone photos; shrunk before upload
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;  // mirrors storage.rules
+const UPLOADABLE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+const canvasToBlob = (canvas, type, quality) => new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+
+/**
+ * Resizes large photos (longest edge `maxEdge`) and re-encodes them as WebP
+ * so a 6 MB phone photo lands as a few hundred KB. PNGs keep transparency
+ * (logos); browsers that can't encode WebP fall back to JPEG/PNG. Small,
+ * already-web-friendly files are uploaded untouched.
+ */
+async function optimiseImage(file, { maxEdge = 2000, quality = 0.86 } = {}) {
   if (!file) throw new Error('Choose an image first.');
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) throw new Error('Use a JPG, PNG, or WebP image.');
-  if (file.size >= 8 * 1024 * 1024) throw new Error('Keep each image below 8 MB.');
+  if (!file.type.startsWith('image/') || file.type === 'image/svg+xml') throw new Error('Choose a photo (JPG, PNG, WebP or a phone photo).');
+  if (file.size > MAX_SOURCE_BYTES) throw new Error('That photo is over 25 MB — choose a smaller one.');
+
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch {
+    if (UPLOADABLE_TYPES.includes(file.type) && file.size < MAX_UPLOAD_BYTES) return file;
+    throw new Error('This photo format isn’t supported here — save it as JPG or PNG and try again.');
+  }
+  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+  if (scale === 1 && UPLOADABLE_TYPES.includes(file.type) && file.size < 1.5 * 1024 * 1024) { bitmap.close(); return file; }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+
+  let blob = await canvasToBlob(canvas, 'image/webp', quality);
+  if (!blob || blob.type !== 'image/webp') blob = await canvasToBlob(canvas, file.type === 'image/png' ? 'image/png' : 'image/jpeg', quality);
+  if (!blob) throw new Error('Could not process this photo.');
+  if (blob.size >= MAX_UPLOAD_BYTES) throw new Error('This photo is still over 8 MB after resizing — try a smaller one.');
+  const ext = { 'image/webp': 'webp', 'image/png': 'png', 'image/jpeg': 'jpg' }[blob.type];
+  const base = (file.name || 'photo').replace(/\.[^.]+$/, '');
+  return new File([blob], `${base}.${ext}`, { type: blob.type });
+}
+
+async function uploadImage(file, folder) {
+  const prepared = await optimiseImage(file);
   const { storage, storageMod } = await loadSdk();
-  const safeName = (file.name || 'photo').toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
-  const path = `products/${slugify(productId) || 'draft'}/${Date.now()}-${safeName || 'photo'}`;
-  const target = storageMod.ref(storage, path);
-  await storageMod.uploadBytes(target, file, { contentType: file.type, cacheControl: 'public,max-age=31536000,immutable' });
+  const safeName = (prepared.name || 'photo').toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  const target = storageMod.ref(storage, `${folder}/${Date.now()}-${safeName || 'photo'}`);
+  await storageMod.uploadBytes(target, prepared, { contentType: prepared.type, cacheControl: 'public,max-age=31536000,immutable' });
   return storageMod.getDownloadURL(target);
 }
 
+/** Uploads a public-facing product photo. Storage rules require `admin: true`
+ * on the signed-in user's custom claims; public visitors cannot upload files. */
+export async function uploadProductImage({ file, productId }) {
+  return uploadImage(file, `products/${slugify(productId) || 'draft'}`);
+}
+
+/** Uploads a homepage/branding image (hero, logo, category tiles, share image). */
+export async function uploadSiteImage({ file }) {
+  return uploadImage(file, 'site');
+}
+
 export { CATEGORIES };
+
+// ---- Site content (CMS) ----------------------------------------------------
+// site/settings and site/home — public-read, admin-write. Shapes and
+// defaults live in /js/site-content.js, shared with the storefront.
+
+export async function getSiteDoc(id, defaults) {
+  const { db, fsMod } = await loadSdk();
+  const snap = await fsMod.getDoc(fsMod.doc(db, 'site', id));
+  return mergeContent(defaults, snap.exists() ? snap.data() : undefined);
+}
+
+export async function saveSiteDoc(id, data) {
+  const { db, fsMod, auth } = await loadSdk();
+  await fsMod.setDoc(fsMod.doc(db, 'site', id), {
+    ...data,
+    updatedAt: fsMod.serverTimestamp(),
+    updatedBy: auth.currentUser?.email || null,
+  });
+}
 
 // ---- Orders ------------------------------------------------------------
 

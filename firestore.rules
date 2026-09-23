@@ -47,6 +47,14 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // site/{docId} — storefront content edited from /admin → Homepage and
+    // Settings. Public read (every visitor renders it); admin-only write,
+    // limited to the two known docs. Shapes: dist/js/site-content.js.
+    match /site/{docId} {
+      allow read: if true;
+      allow write: if isAdmin() && docId in ['settings', 'home'];
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

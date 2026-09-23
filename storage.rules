@@ -19,6 +19,16 @@ service firebase.storage {
         && request.resource.contentType.matches('image/(jpeg|png|webp)');
     }
 
+    // Public homepage/branding imagery (hero, logo, category tiles, share
+    // image) uploaded from /admin → Homepage and Settings. Same limits as
+    // product photos.
+    match /site/{fileName} {
+      allow read: if true;
+      allow write: if isAdmin()
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

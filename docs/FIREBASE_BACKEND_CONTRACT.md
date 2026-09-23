@@ -65,13 +65,46 @@ type Order = {
   buyerUid: string;   // Firebase Auth uid on the request — the read-your-own-order rule matches this
   accountType: 'retail' | 'wholesale';
   paystackEmail: string; // synthetic, derived from phone — Paystack's API requires *an* email; never shown to or collected from the customer
-  lines: Array<{ productId: string; variantId: string; quantity: number; title: string; unitPrice: number }>;
+  lines: Array<{ productId: string; variantId: string; quantity: number; title: string; unitPrice: number; image?: string | null }>;
   customer: { name: string; phone: string; deliveryPreference: 'Delivery' | 'Pickup'; deliveryAddress?: string }; // deliveryAddress required only when deliveryPreference is 'Delivery'
   subtotal: number; currency: 'GHS'; paymentStatus: 'pending' | 'paid' | 'failed';
   fulfillmentStatus: 'unfulfilled' | 'processing' | 'fulfilled' | 'cancelled';
+  payment: { provider: 'paystack'; reference: string; status: 'pending' | 'paid' | 'failed'; transactionId?: string | null; channel?: string | null; paidAt?: string | null };
+  statusHistory: Array<{ status: string; at: string; source: 'system' | 'admin' }>;
   createdAt: Timestamp; updatedAt: Timestamp;
 }
 ```
+
+### `site/{docId}` — storefront content (CMS)
+
+Two documents, edited from `/admin` → **Homepage** (`site/home`) and **Settings** (`site/settings`). The full shapes and default values live in `dist/js/site-content.js`, which both the storefront and the admin import. Readers always deep-merge a doc over those defaults (`mergeContent`), so a missing doc or field falls back to the built-in copy; arrays of objects (`categories.tiles`, `steps.items`) keep their default length and merge by index.
+
+```ts
+type SiteImage = { url: string; alt: string }; // url '' = none (optional images) or "use default" (required ones)
+
+type SiteSettings = {
+  brand: { businessName: string; logo: SiteImage; showWordmark: boolean };
+  contact: { whatsappNumber: string /* digits, country code */; email: string; instagramUrl: string; tiktokUrl: string; facebookUrl: string };
+  announcement: { enabled: boolean; text: string; link: string };
+  shop: { deliveryNote: string };
+  footer: { tagline: string; showAdminLink: boolean };
+  theme: { accent: string; accentDark: string }; // #rrggbb → --rose / --rose-dark
+  seo: { title: string; description: string; shareImage: SiteImage };
+  updatedAt: Timestamp; updatedBy: string | null;
+};
+
+type SiteHome = {
+  hero: { show: boolean; eyebrow: string; headline: string; body: string; primaryCta: { label: string; href: string }; secondaryCta: { label: string; href: string }; image: SiteImage; showLogoPanel: boolean; logoPanelImage: SiteImage; motionLabel: string; badges: string[] };
+  categories: { show: boolean; eyebrow: string; title: string; tiles: Array<{ id: 'wigs' | 'bundles' | 'extensions' | 'accessories'; label: string; detail: string; image: SiteImage }> };
+  paths: { show: boolean; eyebrow: string; title: string; retail: PathCard; wholesale: PathCard }; // PathCard = { eyebrow, title, body, ctaLabel }
+  featured: { show: boolean; eyebrow: string; title: string; emptyText: string };
+  steps: { show: boolean; eyebrow: string; title: string; items: Array<{ title: string; body: string }> };
+  newsletter: { show: boolean; eyebrow: string; title: string; body: string; ctaLabel: string; ctaHref: string /* '' = mailto contact email */ };
+  updatedAt: Timestamp; updatedBy: string | null;
+};
+```
+
+All CMS text is HTML-escaped when rendered. Headlines/titles support two formatting affordances only: `*word*` → script accent (`<em>`), newline → `<br>` (`richText`). Links pass through `safeHref` (site-relative, `https://`, `mailto:`, `tel:` only).
 
 ## Adapter methods to implement
 
@@ -87,6 +120,7 @@ createCheckout({ lines, customer }) -> { checkoutUrl: string }
 signIn({ email, password }) -> void
 signOut() -> void
 getAccount() -> { isWholesale: boolean; name: string } | null
+getSiteContent() -> { settings: SiteSettings; home: SiteHome } // merged over defaults; never throws
 ```
 
 Use Firestore only for publicly readable active-product documents and a user-owned cart. Send `createCheckout` to a callable HTTPS endpoint; it must recalculate product/variant price (retail or wholesale, based on the caller's `wholesale` custom claim — never a client-supplied price) and stock, store the customer's order-contact and delivery-preference details, create the payment intent/session, and return only a provider redirect URL.
@@ -98,6 +132,7 @@ Use Firestore only for publicly readable active-product documents and a user-own
 - `orders` are server-created; client writes are forbidden. Status changes go through the `updateOrderStatus` callable (admin-only), not a direct write.
 - `customers` are admin-only, both read and write.
 - Store storefront product images only under `products/{productId}/{fileName}` in Cloud Storage. The first `images[]` item is copied to `image` as the cover. Browser uploads are limited to JPEG, PNG, or WebP below 8 MB and require the `admin` custom claim; supplier/source assets stay in a separate private path or bucket.
+- `site/settings` and `site/home` are public-read, admin-write (no other doc ids under `site/`). Their images live under `site/{fileName}` in Cloud Storage with the same public-read / admin-write / 8 MB / JPEG-PNG-WebP limits as product photos. The admin uploader resizes photos in the browser (longest edge 2000px, WebP) before upload, so raw phone photos up to 25 MB are accepted.
 - Add Firebase App Check before enabling public write paths.
 - Stock lives in Firestore as a real number (`variants[].stock`) and is only ever decremented inside `paystackWebhook`'s transaction on confirmed payment; never decrement stock from this frontend.
 

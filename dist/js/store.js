@@ -1,5 +1,6 @@
-import { products } from './data.js';
-import { firebaseConfig, isFirebaseConfigured } from './firebase-config.js';
+import { products } from './data.js?v=2';
+import { firebaseConfig, isFirebaseConfigured } from './firebase-config.js?v=2';
+import { DEFAULT_HOME, DEFAULT_SETTINGS, mergeContent } from './site-content.js?v=2';
 
 const CART_KEY = 'nakuadiary-demo-cart';
 const FUNCTIONS_REGION = 'us-central1';
@@ -31,6 +32,7 @@ const mockStore = {
   signIn: () => Promise.reject(new Error('Sign in is available once the store is connected to Firebase.')),
   signOut: () => wait(undefined),
   getAccount: () => wait(null),
+  getSiteContent: () => wait({ settings: mergeContent(DEFAULT_SETTINGS), home: mergeContent(DEFAULT_HOME) }),
 };
 
 // Real adapter: Firestore for the public catalog and the signed-in-as-guest
@@ -55,24 +57,47 @@ async function createFirebaseStore() {
   const productCache = new Map();
   let currentUser = null;
   let isWholesale = false;
-  let resolveAuthReady;
-  const authReady = new Promise((resolve) => { resolveAuthReady = resolve; });
+  let authError = null;
+  // Callers waiting for a signed-in user that satisfies `accepts` (any user,
+  // an anonymous one after sign-out, or a specific uid after sign-in).
+  const waiting = [];
 
   onAuthStateChanged(auth, async (user) => {
-    currentUser = user;
-    isWholesale = false;
-    if (user) {
-      try {
-        const token = await user.getIdTokenResult();
-        isWholesale = token.claims.wholesale === true;
-      } catch { /* leave isWholesale false */ }
+    if (!user) {
+      // No session yet (first visit, or just signed out): start a guest one.
+      // Only here — calling signInAnonymously while a wholesale session is
+      // restored would replace it and log the customer out on every load.
+      currentUser = null;
+      isWholesale = false;
+      productCache.clear();
+      signInAnonymously(auth).catch((err) => {
+        authError = err;
+        waiting.splice(0).forEach(({ reject }) => reject(err));
+      });
+      return;
     }
+    let wholesale = false;
+    try {
+      const token = await user.getIdTokenResult();
+      wholesale = token.claims.wholesale === true;
+    } catch { /* treat as retail */ }
+    if (auth.currentUser?.uid !== user.uid) return; // superseded while reading claims
+    // Publish user + tier together so nobody sees a user with a stale tier.
+    currentUser = user;
+    isWholesale = wholesale;
+    authError = null;
     productCache.clear();
-    resolveAuthReady(user);
+    for (let i = waiting.length - 1; i >= 0; i -= 1) {
+      if (waiting[i].accepts(user)) waiting.splice(i, 1)[0].resolve(user);
+    }
   });
-  signInAnonymously(auth).catch(() => {}); // no-ops once a real (wholesale) session exists
 
-  async function ensureReady() { return currentUser || authReady; }
+  function waitForUser(accepts = () => true) {
+    if (currentUser && accepts(currentUser)) return Promise.resolve(currentUser);
+    if (authError) return Promise.reject(authError);
+    return new Promise((resolve, reject) => waiting.push({ accepts, resolve, reject }));
+  }
+  const ensureReady = () => waitForUser();
   const uid = async () => (await ensureReady()).uid;
 
   function mapProduct(id, data) {
@@ -172,16 +197,33 @@ async function createFirebaseStore() {
       return data;
     },
     signIn: async ({ email, password }) => {
-      await signInWithEmailAndPassword(auth, email, password);
+      const { user } = await signInWithEmailAndPassword(auth, email, password);
+      await waitForUser((u) => u.uid === user.uid); // claims (wholesale tier) loaded
     },
     signOut: async () => {
       await firebaseSignOut(auth);
-      await signInAnonymously(auth);
+      await waitForUser((u) => u.isAnonymous); // the listener starts the new guest session
     },
     getAccount: async () => {
       await ensureReady();
       if (!isWholesale || !currentUser) return null;
       return { isWholesale: true, name: currentUser.displayName || currentUser.email || 'Wholesale account' };
+    },
+    // Public CMS docs written from /admin. Any failure (rules not deployed
+    // yet, offline) falls back to the built-in defaults rather than blanking
+    // the page.
+    getSiteContent: async () => {
+      const read = async (id) => {
+        try {
+          const snap = await getDoc(doc(db, 'site', id));
+          return snap.exists() ? snap.data() : undefined;
+        } catch (err) {
+          console.warn(`Could not load site/${id}; using defaults.`, err);
+          return undefined;
+        }
+      };
+      const [settings, home] = await Promise.all([read('settings'), read('home')]);
+      return { settings: mergeContent(DEFAULT_SETTINGS, settings), home: mergeContent(DEFAULT_HOME, home) };
     },
   };
 }

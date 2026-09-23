@@ -122,6 +122,9 @@ exports.createCheckout = onCall({ secrets: [PAYSTACK_SECRET_KEY] }, async (reque
       quantity,
       title: `${product.name} — ${variant.label}`,
       unitPrice,
+      // Snapshot the cover photo so the admin can see exactly what was
+      // ordered even if the product photos change later.
+      image: product.images?.[0]?.url || product.image?.url || null,
     });
   }
 
@@ -149,7 +152,9 @@ exports.createCheckout = onCall({ secrets: [PAYSTACK_SECRET_KEY] }, async (reque
     subtotal,
     currency: 'GHS',
     paymentStatus: 'pending',
+    payment: { provider: 'paystack', reference: orderRef.id, status: 'pending' },
     fulfillmentStatus: 'unfulfilled',
+    statusHistory: [{ status: 'unfulfilled', at: new Date().toISOString(), source: 'system' }],
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
@@ -261,7 +266,19 @@ exports.paystackWebhook = onRequest({ secrets: [PAYSTACK_SECRET_KEY] }, async (r
         });
       }
 
-      tx.update(orderRef, { paymentStatus: 'paid', updatedAt: FieldValue.serverTimestamp() });
+      tx.update(orderRef, {
+        paymentStatus: 'paid',
+        payment: {
+          provider: 'paystack',
+          reference,
+          status: 'paid',
+          transactionId: event?.data?.id ? String(event.data.id) : null,
+          channel: event?.data?.channel || null,
+          paidAt: event?.data?.paid_at || new Date().toISOString(),
+          amount: typeof event?.data?.amount === 'number' ? event.data.amount / 100 : order.subtotal,
+        },
+        updatedAt: FieldValue.serverTimestamp(),
+      });
       tx.set(db.collection('carts').doc(order.buyerUid), {
         lines: [],
         updatedAt: FieldValue.serverTimestamp(),
@@ -272,7 +289,7 @@ exports.paystackWebhook = onRequest({ secrets: [PAYSTACK_SECRET_KEY] }, async (r
       }, { merge: true });
     });
   } else if (event.event === 'charge.failed') {
-    await orderRef.update({ paymentStatus: 'failed', updatedAt: FieldValue.serverTimestamp() }).catch(() => {});
+    await orderRef.update({ paymentStatus: 'failed', payment: { provider: 'paystack', reference, status: 'failed' }, updatedAt: FieldValue.serverTimestamp() }).catch(() => {});
   }
 
   res.status(200).send('ok');
@@ -302,7 +319,11 @@ exports.updateOrderStatus = onCall(async (request) => {
     if (!allowed.includes(fulfillmentStatus)) {
       throw new HttpsError('failed-precondition', `Cannot move an order from "${current}" to "${fulfillmentStatus}".`);
     }
-    tx.update(orderRef, { fulfillmentStatus, updatedAt: FieldValue.serverTimestamp() });
+    tx.update(orderRef, {
+      fulfillmentStatus,
+      statusHistory: FieldValue.arrayUnion({ status: fulfillmentStatus, at: new Date().toISOString(), source: 'admin' }),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
   });
 
   return { ok: true };

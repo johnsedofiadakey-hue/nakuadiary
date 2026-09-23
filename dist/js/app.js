@@ -1,15 +1,28 @@
-import { categories, editorialImages } from './data.js';
-import { store } from './store.js';
-import { money } from './components/templates.js';
-import { updateSeo } from './seo.js';
+import { categories } from './data.js?v=2';
+import { store } from './store.js?v=2';
+import { money } from './components/templates.js?v=2';
+import { updateSeo } from './seo.js?v=2';
+import { DEFAULT_HOME, escapeHtml as esc, richText, safeHref, isHexColour } from './site-content.js?v=2';
 
 const app = document.querySelector('#app');
 const page = document.body.dataset.page;
 
-// Replace with the real business WhatsApp number (digits only, country code,
-// no leading +) before going live — this is a placeholder.
-const WHATSAPP_NUMBER = '233200000000';
-const waLink = (text) => `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
+// Editable storefront content (see site-content.js). Loaded once at start-up;
+// the WhatsApp number, contact email, logo and homepage copy all come from
+// /admin → Settings and /admin → Homepage.
+const site = await store.getSiteContent();
+const settings = site.settings;
+const whatsappNumber = () => String(settings.contact.whatsappNumber || '').replace(/\D/g, '');
+const contactEmail = () => settings.contact.email.trim();
+const waLink = (text) => `https://wa.me/${whatsappNumber()}?text=${encodeURIComponent(text)}`;
+const mailLink = (subject) => `mailto:${encodeURIComponent(contactEmail()).replace(/%40/g, '@')}?subject=${encodeURIComponent(subject)}`;
+const imageUrl = (image, fallback = '') => safeHref(image?.url, fallback);
+
+function applyTheme() {
+  const root = document.documentElement.style;
+  if (isHexColour(settings.theme.accent)) root.setProperty('--rose', settings.theme.accent);
+  if (isHexColour(settings.theme.accentDark)) root.setProperty('--rose-dark', settings.theme.accentDark);
+}
 
 let activeProduct = null;
 let activeCategory = 'all';
@@ -34,14 +47,33 @@ function productCard(product) {
 
 // ---- Shared chrome (header, footer, cart, dialogs) -----------------------
 
+function brandHtml(extraClass = '') {
+  const { businessName, logo, showWordmark } = settings.brand;
+  const logoUrl = imageUrl(logo, '/assets/nakuadiary-logo.png');
+  return `<a class="brand ${extraClass}" href="/" aria-label="${esc(businessName)} home"><img class="brand-mark" src="${esc(logoUrl)}" alt="" />${showWordmark ? '<span>NAKUA<em>diary</em></span>' : ''}</a>`;
+}
+
+function announcementHtml() {
+  const { enabled, text, link } = settings.announcement;
+  if (!enabled || !text.trim()) return '';
+  const href = link.trim() ? safeHref(link, '') : '';
+  return `<div class="announcement-bar">${href ? `<a href="${esc(href)}">${esc(text)}</a>` : `<span>${esc(text)}</span>`}</div>`;
+}
+
+function socialLinksHtml() {
+  const links = [['Instagram', settings.contact.instagramUrl], ['TikTok', settings.contact.tiktokUrl], ['Facebook', settings.contact.facebookUrl]]
+    .filter(([, url]) => /^https?:\/\//i.test(url.trim()));
+  return links.map(([label, url]) => `<a href="${esc(url.trim())}" target="_blank" rel="noopener">${label}</a>`).join('');
+}
+
 function headerHtml() {
   const nav = [
     { href: '/', label: 'Home', key: 'home' },
     { href: '/shop', label: 'Shop', key: 'shop' },
     { href: '/wholesale', label: 'Wholesale', key: 'wholesale' },
   ];
-  return `<header class="site-header">
-    <a class="brand" href="/" aria-label="Nakuadiary home"><img class="brand-mark" src="/assets/nakuadiary-logo.png" alt="" /><span>NAKUA<em>diary</em></span></a>
+  return `${announcementHtml()}<header class="site-header">
+    ${brandHtml()}
     <button class="menu-button" type="button" data-menu-button aria-expanded="false" aria-controls="site-nav">Menu</button>
     <nav class="site-nav" id="site-nav">${nav.map((n) => `<a href="${n.href}" class="${page === n.key ? 'is-active' : ''}">${n.label}</a>`).join('')}</nav>
     <div class="header-actions">
@@ -52,10 +84,12 @@ function headerHtml() {
 }
 
 function footerHtml() {
+  const { businessName } = settings.brand;
+  const { tagline, showAdminLink } = settings.footer;
   return `<footer class="site-footer">
-    <a class="brand footer-brand" href="/" aria-label="Nakuadiary home"><img class="brand-mark" src="/assets/nakuadiary-logo.png" alt="" /><span>NAKUA<em>diary</em></span></a>
-    <nav><a href="/shop">Shop</a><a href="/wholesale">Wholesale</a><a href="${waLink('Hi! I have a question about Nakuadiary.')}" target="_blank" rel="noopener">WhatsApp us</a></nav>
-    <p>© ${new Date().getFullYear()} Nakuadiary · Wigs, bundles, extensions & accessories</p>
+    ${brandHtml('footer-brand')}
+    <nav><a href="/shop">Shop</a><a href="/wholesale">Wholesale</a><a href="${waLink(`Hi! I have a question about ${businessName}.`)}" target="_blank" rel="noopener">WhatsApp us</a>${socialLinksHtml()}</nav>
+    <div class="footer-meta"><p>© ${new Date().getFullYear()} ${esc(businessName)}${tagline.trim() ? ` · ${esc(tagline)}` : ''}</p>${showAdminLink ? '<a class="footer-admin-link" href="/admin">Admin login</a>' : ''}</div>
   </footer>`;
 }
 
@@ -66,7 +100,7 @@ function chromeExtrasHtml() {
     <div data-cart-lines></div>
     <footer>
       <p class="cart-total"><span>Subtotal</span><strong data-cart-total>${money(0)}</strong></p>
-      <p class="delivery-note">Delivery arrangements are confirmed before your order is dispatched.</p>
+      <p class="delivery-note">${esc(settings.shop.deliveryNote)}</p>
       <button class="btn wide" type="button" data-open-checkout>Continue to checkout</button>
     </footer>
   </aside>
@@ -152,45 +186,73 @@ function syncDeliveryAddressField(select) {
 
 // ---- Page: home ------------------------------------------------------------
 
+function heroHtml(hero) {
+  const heroImage = imageUrl(hero.image, DEFAULT_HOME.hero.image.url);
+  const panelImage = imageUrl(hero.logoPanelImage, '');
+  const ctas = [[hero.primaryCta, 'btn'], [hero.secondaryCta, 'btn outline']].filter(([cta]) => cta.label.trim());
+  return `<section class="hero">
+      <div class="hero-blob b1"></div><div class="hero-blob b2"></div><i class="hero-orbit orbit-a" aria-hidden="true"></i><i class="hero-orbit orbit-b" aria-hidden="true"></i>
+      <div class="hero-copy">
+        ${hero.eyebrow.trim() ? `<p class="eyebrow">${esc(hero.eyebrow)}</p>` : ''}
+        <h1>${richText(hero.headline)}</h1>
+        ${hero.body.trim() ? `<p>${esc(hero.body)}</p>` : ''}
+        ${ctas.length ? `<div class="hero-actions">${ctas.map(([cta, cls]) => `<a class="${cls}" href="${esc(safeHref(cta.href, '/shop'))}">${esc(cta.label)}</a>`).join('')}</div>` : ''}
+      </div>
+      <div class="hero-visual"><img src="${esc(heroImage)}" alt="${esc(hero.image.alt)}" />${hero.showLogoPanel && panelImage ? `<div class="hero-logo-panel"><img src="${esc(panelImage)}" alt="${esc(hero.logoPanelImage.alt)}" /></div>` : ''}${hero.motionLabel.trim() ? `<span class="hero-motion-label" aria-hidden="true">${esc(hero.motionLabel)}</span>` : ''}</div>
+      ${hero.badges.length ? `<div class="hero-badges">${hero.badges.map((badge) => `<span>${esc(badge)}</span>`).join('')}</div>` : ''}
+    </section>`;
+}
+
+const sectionHead = ({ eyebrow, title }) => `<div class="section-head">${eyebrow.trim() ? `<p class="eyebrow">${esc(eyebrow)}</p>` : ''}<h2>${richText(title)}</h2></div>`;
+
 async function renderHome() {
   const main = document.querySelector('[data-main]');
-  const featured = await store.listProducts({ featured: true });
-  main.innerHTML = `
-    <section class="hero">
-      <div class="hero-blob b1"></div><div class="hero-blob b2"></div>
-      <div class="hero-copy">
-        <p class="eyebrow">Soft hair, softer prices</p>
-        <h1>HAIR THAT<br>FEELS LIKE <em>you</em>.</h1>
-        <p>Human hair wigs, bundles and extensions — retail and wholesale — with prices in Ghana cedis and a checkout that doesn't overcomplicate things.</p>
-        <div class="hero-actions"><a class="btn" href="/shop">Shop the edit</a><a class="btn outline" href="/wholesale">Wholesale pricing</a></div>
-      </div>
-      <div class="hero-visual"><img src="${editorialImages.hero.url}" alt="${editorialImages.hero.alt}" /></div>
-      <div class="hero-badges"><span>Prices in GHS</span><span>Guest checkout</span><span>MoMo & card checkout</span></div>
-    </section>
-    <section class="section">
-      <div class="section-head"><p class="eyebrow">Start here</p><h2>What are you shopping for?</h2></div>
-      <div class="category-grid">${categories.map((c) => `<a class="category-tile" href="/shop?category=${c.id}"><b>${c.label}</b><span>${c.detail}</span><i>Shop now →</i></a>`).join('')}</div>
-    </section>
-    <section class="section tint">
-      <div class="section-head"><p class="eyebrow">Two ways to shop</p><h2>Retail &amp; wholesale, both welcome.</h2></div>
+  const home = site.home;
+  const featured = home.featured.show ? await store.listProducts({ featured: true }) : [];
+  if (settings.seo.title.trim()) {
+    updateSeo({ title: settings.seo.title, description: settings.seo.description, image: imageUrl(settings.seo.shareImage, '/assets/nakuadiary-social.png') });
+  }
+  const { categories: cats, paths, steps, newsletter } = home;
+  const sections = [
+    home.hero.show && heroHtml(home.hero),
+    cats.show && `<section class="section" data-home-reveal>
+      ${sectionHead(cats)}
+      <div class="category-grid">${cats.tiles.map((tile) => {
+        const photo = imageUrl(tile.image, '');
+        return `<a class="category-tile ${photo ? 'has-image' : ''}" href="/shop?category=${encodeURIComponent(tile.id)}">${photo ? `<img class="category-tile-image" src="${esc(photo)}" alt="${esc(tile.image.alt)}" loading="lazy" />` : ''}<b>${esc(tile.label)}</b><span>${esc(tile.detail)}</span><i>Shop now →</i></a>`;
+      }).join('')}</div>
+    </section>`,
+    paths.show && `<section class="section tint" data-home-reveal>
+      ${sectionHead(paths)}
       <div class="paths">
-        <div class="path-card"><p class="eyebrow">Retail</p><h3>Shopping for yourself?</h3><p>Browse the full collection, pick your length, and check out as a guest — no account needed.</p><a class="btn outline" href="/shop">Shop retail</a></div>
-        <div class="path-card wholesale"><p class="eyebrow">Wholesale</p><h3>Buying in bulk?</h3><p>Salons, stylists and resellers get a dedicated price list and lower minimums once their account is set up.</p><a class="btn" href="/wholesale">See wholesale pricing</a></div>
+        <div class="path-card"><p class="eyebrow">${esc(paths.retail.eyebrow)}</p><h3>${esc(paths.retail.title)}</h3><p>${esc(paths.retail.body)}</p><a class="btn outline" href="/shop">${esc(paths.retail.ctaLabel)}</a></div>
+        <div class="path-card wholesale"><p class="eyebrow">${esc(paths.wholesale.eyebrow)}</p><h3>${esc(paths.wholesale.title)}</h3><p>${esc(paths.wholesale.body)}</p><a class="btn" href="/wholesale">${esc(paths.wholesale.ctaLabel)}</a></div>
       </div>
-    </section>
-    <section class="section">
-      <div class="section-head"><p class="eyebrow">Best sellers</p><h2>A few favourites.</h2></div>
-      <div class="product-grid">${featured.length ? featured.map(productCard).join('') : '<p class="empty-products">The edit is on its way.</p>'}</div>
-    </section>
-    <section class="section tint">
-      <div class="section-head"><p class="eyebrow">Simple from phone to order</p><h2>Shop in three steps.</h2></div>
-      <div class="steps">
-        <div class="step"><span>01</span><h3>Choose your texture</h3><p>Wigs, bundles, extensions or accessories.</p></div>
-        <div class="step"><span>02</span><h3>Select your length</h3><p>See the GHS price before you add it to your bag.</p></div>
-        <div class="step"><span>03</span><h3>Check out as a guest</h3><p>Enter your delivery details, then pay by Mobile Money or card.</p></div>
-      </div>
-    </section>
-    <section class="newsletter"><p class="eyebrow">The Nakuadiary list</p><h2>New textures, <em>good hair days.</em></h2><p>Be first to hear about new arrivals and restocks.</p><a class="btn" href="mailto:hello@example.com?subject=Nakuadiary%20private%20list">Join the private list</a></section>`;
+    </section>`,
+    home.featured.show && `<section class="section" data-home-reveal>
+      ${sectionHead(home.featured)}
+      <div class="product-grid home-product-grid">${featured.length ? featured.map(productCard).join('') : `<p class="empty-products">${esc(home.featured.emptyText)}</p>`}</div>
+    </section>`,
+    steps.show && `<section class="section tint" data-home-reveal>
+      ${sectionHead(steps)}
+      <div class="steps">${steps.items.map((step, index) => `<div class="step"><span>${String(index + 1).padStart(2, '0')}</span><h3>${esc(step.title)}</h3><p>${esc(step.body)}</p></div>`).join('')}</div>
+    </section>`,
+    newsletter.show && `<section class="newsletter" data-home-reveal>${newsletter.eyebrow.trim() ? `<p class="eyebrow">${esc(newsletter.eyebrow)}</p>` : ''}<h2>${richText(newsletter.title)}</h2>${newsletter.body.trim() ? `<p>${esc(newsletter.body)}</p>` : ''}${newsletter.ctaLabel.trim() ? `<a class="btn" href="${esc(newsletter.ctaHref.trim() ? safeHref(newsletter.ctaHref, '/') : mailLink(`${settings.brand.businessName} private list`))}">${esc(newsletter.ctaLabel)}</a>` : ''}</section>`,
+  ];
+  main.innerHTML = sections.filter(Boolean).join('');
+  setupHomeReveals(main);
+}
+
+function setupHomeReveals(main) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) return;
+  const observer = new IntersectionObserver((entries, currentObserver) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add('is-visible');
+      currentObserver.unobserve(entry.target);
+    });
+  }, { threshold: 0.12 });
+  main.querySelectorAll('[data-home-reveal]').forEach((section) => observer.observe(section));
 }
 
 // ---- Page: shop --------------------------------------------------------
@@ -274,8 +336,8 @@ function renderWholesale() {
     <div class="wholesale-card">
       <h2>Ready to apply?</h2>
       <p>Message us with your business name and what you're looking to stock — we'll set up your wholesale account and send your login directly.</p>
-      <a class="btn whatsapp wide" href="${waLink("Hi! I'd like to apply for a Nakuadiary wholesale account.")}" target="_blank" rel="noopener">Message us on WhatsApp</a>
-      <a class="btn outline wide" style="margin-top:.7rem" href="mailto:hello@example.com?subject=Wholesale%20enquiry">Email us instead</a>
+      <a class="btn whatsapp wide" href="${waLink(`Hi! I'd like to apply for a ${settings.brand.businessName} wholesale account.`)}" target="_blank" rel="noopener">Message us on WhatsApp</a>
+      <a class="btn outline wide" style="margin-top:.7rem" href="${esc(mailLink('Wholesale enquiry'))}">Email us instead</a>
     </div>
   </section>
   <section class="section">
@@ -391,6 +453,7 @@ function wireEvents() {
 
 // ---- Init ------------------------------------------------------------
 
+applyTheme();
 renderShell();
 wireEvents();
 renderAccount();
