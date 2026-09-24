@@ -33,11 +33,46 @@ service cloud.firestore {
     }
 
     // orders/{orderId} — server-created only (Cloud Functions via Admin SDK).
-    // Status/fulfillment changes go through the updateOrderStatus callable,
-    // not a direct write, so the state machine is validated in one place.
+    // Status changes go through the updateOrderStatus callable, never a
+    // direct write, so the state machine is enforced in one place.
     match /orders/{orderId} {
       allow read: if (request.auth != null && request.auth.uid == resource.data.buyerUid) || isAdmin();
       allow write: if false;
+
+      // Append-only audit trail of every status change (functions only).
+      match /events/{eventId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+
+    // smsOutbox/{orderId_status} — one doc per order SMS, written and sent by
+    // functions only. Admins can see delivery state; re-sends go through the
+    // resendOrderSms callable.
+    match /smsOutbox/{messageId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // paystackEvents/{eventKey} — webhook de-duplication log (functions only).
+    match /paystackEvents/{eventKey} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // config/sms — admin-editable SMS sender ID, templates and on/off switch.
+    // Never readable by the public; never holds API keys (those are
+    // Secret Manager secrets on the functions).
+    match /config/{docId} {
+      allow read: if isAdmin() && docId == 'sms';
+      allow write: if isAdmin() && docId == 'sms'
+        && request.resource.data.keys().hasOnly(['enabled', 'senderId', 'templates', 'ownerPhone', 'ownerAlerts', 'updatedAt', 'updatedBy'])
+        && (!('senderId' in request.resource.data) || (request.resource.data.senderId is string && request.resource.data.senderId.size() <= 11))
+        && (!('enabled' in request.resource.data) || request.resource.data.enabled is bool)
+        && (!('ownerAlerts' in request.resource.data) || request.resource.data.ownerAlerts is bool)
+        && (!('ownerPhone' in request.resource.data) || (request.resource.data.ownerPhone is string && request.resource.data.ownerPhone.size() <= 24))
+        && (!('templates' in request.resource.data) || (request.resource.data.templates is map
+            && request.resource.data.templates.keys().hasOnly(['paid', 'processing', 'dispatched', 'delivered', 'owner'])));
     }
 
     // customers/{customerId} — admin-only. Contains business data

@@ -22,11 +22,12 @@ service firebase.storage {
     // Public homepage/branding imagery (hero, logo, category tiles, share
     // image) uploaded from /admin → Homepage and Settings. Same limits as
     // product photos.
+    // The optional hero video is the one non-image allowed: MP4 only, < 40 MB.
     match /site/{fileName} {
       allow read: if true;
-      allow write: if isAdmin()
-        && request.resource.size < 8 * 1024 * 1024
-        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow write: if isAdmin() && (
+        (request.resource.size < 8 * 1024 * 1024 && request.resource.contentType.matches('image/(jpeg|png|webp)'))
+        || (request.resource.size < 40 * 1024 * 1024 && request.resource.contentType == 'video/mp4'));
     }
 
     match /{allPaths=**} {

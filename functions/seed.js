@@ -31,6 +31,13 @@ const source = [
   ['lace-melt-band', 'Lace Melt Band', 'accessories', 'Finishing accessory', 95, 75, gallery(stock.curls), ['Black'], ['Breathable stretch', 'Reusable', 'One size']],
 ];
 
+// Texture/style filters shown on the shop page (admin → product → Tags).
+const TAGS = {
+  'silk-straight': ['Straight', 'HD lace'], 'body-wave': ['Body wave'], 'deep-wave': ['Deep wave'],
+  'water-wave': ['Water wave', 'HD lace'], 'deep-curly': ['Curly', 'HD lace'], 'loose-wave': ['Loose wave', 'Clip-in'],
+  'lace-melt-band': [],
+};
+
 const DEFAULT_STOCK = 20;
 const DEFAULT_MIN_WHOLESALE_QTY = 3;
 
@@ -53,6 +60,7 @@ async function seed() {
       images,
       variants: variants.map((label) => ({ id: variantId(label), label, available: true, stock: DEFAULT_STOCK })),
       badges: [],
+      tags: TAGS[id] || [],
       featured: ['silk-straight', 'body-wave', 'deep-curly'].includes(id),
       active: true,
       inventoryPolicy: 'deny',
