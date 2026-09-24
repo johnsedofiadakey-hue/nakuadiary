@@ -1,0 +1,22 @@
+{
+  "name": "Nakuadiary Admin",
+  "short_name": "Nakua Admin",
+  "description": "Manage Nakuadiary orders, stock, products and website.",
+  "id": "/admin",
+  "start_url": "/admin#/home",
+  "scope": "/admin",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fffaf5",
+  "theme_color": "#2a1915",
+  "icons": [
+    { "src": "/admin/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/admin/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/admin/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Orders", "url": "/admin#/orders", "icons": [{ "src": "/admin/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Stock", "url": "/admin#/stock", "icons": [{ "src": "/admin/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Add product", "url": "/admin#/products/new", "icons": [{ "src": "/admin/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

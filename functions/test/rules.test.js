@@ -107,3 +107,15 @@ test('storage: public read of product/site images, admin-only image uploads', as
   await assertFails(uploadBytes(ref(adminStorage, 'site/huge.mp4'), new Uint8Array(40 * 1024 * 1024), { contentType: 'video/mp4' }));
   await assertFails(uploadBytes(ref(adminStorage, 'products/p1/clip.mp4'), new Uint8Array(1024), { contentType: 'video/mp4' }));
 });
+
+test('adminDevices: admins manage only their own devices', async () => {
+  const mine = { token: 't'.repeat(40), uid: 'boss', email: 'b@x.com', enabled: true };
+  await assertSucceeds(setDoc(doc(admin(), 'adminDevices/d1'), mine));
+  await assertSucceeds(getDoc(doc(admin(), 'adminDevices/d1')));
+  await assertFails(setDoc(doc(admin(), 'adminDevices/d2'), { ...mine, uid: 'someone-else' }));
+  await assertFails(setDoc(doc(admin(), 'adminDevices/d3'), { ...mine, extra: 1 }));
+  await assertFails(setDoc(doc(user('alice'), 'adminDevices/d4'), { ...mine, uid: 'alice' }));
+  await assertFails(getDoc(doc(env.authenticatedContext('other-admin', { admin: true }).firestore(), 'adminDevices/d1')));
+  await assertFails(setDoc(doc(admin(), 'pushLog/x'), { a: 1 }));
+});
+

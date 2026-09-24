@@ -25,6 +25,19 @@
             "value": "public,max-age=86400"
           }
         ]
+      },
+      {
+        "source": "/admin/sw.js",
+        "headers": [
+          {
+            "key": "Service-Worker-Allowed",
+            "value": "/admin"
+          },
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
       }
     ],
     "rewrites": [

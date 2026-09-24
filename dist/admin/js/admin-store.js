@@ -2,6 +2,9 @@ import { firebaseConfig, isFirebaseConfigured } from '/js/firebase-config.js?v=2
 import { mergeContent } from '/js/site-content.js?v=2';
 
 const FUNCTIONS_REGION = 'us-central1';
+// Firebase Cloud Messaging "Web Push certificate" public key (Firebase console →
+// Project settings → Cloud Messaging). Public by design — safe in browser code.
+const FCM_VAPID_KEY = 'BN5CvtCZnY3f_CxPjH3hJgTaBGb6Nj2MkBmXYFGh5O0QX6F7OzeYQIVz-jMBzgPcVy0Ycr2sXWFU_ubp4KbSIIQ';
 const SDK = 'https://www.gstatic.com/firebasejs/12.19.0';
 const CATEGORIES = ['wigs', 'bundles', 'extensions', 'accessories'];
 
@@ -47,6 +50,91 @@ export async function onAdminAuthChange(callback) {
       callback({ user, isAdmin: false });
     }
   });
+}
+
+export async function getOrder(id) {
+  const { db, fsMod } = await loadSdk();
+  const snap = await fsMod.getDoc(fsMod.doc(db, 'orders', id));
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+// ---- Phone alerts (web push) ---------------------------------------------------
+
+const DEVICE_KEY = 'nakua-admin-device';
+const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isInstalled = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
+/** 'ready' | 'ios-install' (iPhone must add to Home Screen first) | 'denied' | 'unsupported'. */
+export function pushAvailability() {
+  if (isIos() && !isInstalled()) return 'ios-install';
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'unsupported';
+  if (Notification.permission === 'denied') return 'denied';
+  return 'ready';
+}
+
+export const thisDeviceId = () => { try { return localStorage.getItem(DEVICE_KEY); } catch { return null; } };
+
+export function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return Promise.resolve(null);
+  return navigator.serviceWorker.register('/admin/sw.js', { scope: '/admin' }).catch(() => null);
+}
+
+async function sha256Hex(text) {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 40);
+}
+
+function deviceLabel() {
+  const ua = navigator.userAgent;
+  const os = /iphone/i.test(ua) ? 'iPhone' : /ipad/i.test(ua) ? 'iPad' : /android/i.test(ua) ? 'Android phone' : /mac/i.test(ua) ? 'Mac' : /windows/i.test(ua) ? 'Windows PC' : 'Device';
+  const browser = /edg/i.test(ua) ? 'Edge' : /chrome|crios/i.test(ua) ? 'Chrome' : /firefox|fxios/i.test(ua) ? 'Firefox' : /safari/i.test(ua) ? 'Safari' : 'browser';
+  return `${os} · ${browser}${isInstalled() ? ' (app)' : ''}`;
+}
+
+/** Asks permission, gets an FCM token and saves this device. Returns the device id. */
+export async function enablePushOnThisDevice() {
+  const availability = pushAvailability();
+  if (availability !== 'ready') throw new Error(availability === 'ios-install' ? 'On iPhone, add this app to your Home Screen first, then open it from there.' : availability === 'denied' ? 'Notifications are blocked for this site. Allow them in your phone/browser settings, then try again.' : 'This browser can’t receive notifications. Try Chrome on Android, or the installed app on iPhone.');
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') throw new Error('Notifications weren’t allowed. Tap “Allow” when asked.');
+  const registration = await registerServiceWorker();
+  if (!registration) throw new Error('Could not set up notifications on this device.');
+  await navigator.serviceWorker.ready;
+  const { app, db, fsMod, auth } = await loadSdk();
+  const messagingMod = await import(`${SDK}/firebase-messaging.js`);
+  if (!(await messagingMod.isSupported())) throw new Error('This browser can’t receive notifications.');
+  const token = await messagingMod.getToken(messagingMod.getMessaging(app), { vapidKey: FCM_VAPID_KEY, serviceWorkerRegistration: registration });
+  if (!token) throw new Error('Could not get a notification token. Please try again.');
+  const id = await sha256Hex(token);
+  const ref = fsMod.doc(db, 'adminDevices', id);
+  const existing = await fsMod.getDoc(ref).catch(() => null);
+  await fsMod.setDoc(ref, {
+    token, uid: auth.currentUser.uid, email: auth.currentUser.email || null, label: deviceLabel(), enabled: true,
+    createdAt: existing?.exists() ? existing.data().createdAt : fsMod.serverTimestamp(), lastSeenAt: fsMod.serverTimestamp(),
+  });
+  try { localStorage.setItem(DEVICE_KEY, id); } catch { /* private mode */ }
+  return id;
+}
+
+export async function listMyDevices() {
+  const { db, fsMod, auth } = await loadSdk();
+  const snap = await fsMod.getDocs(fsMod.query(fsMod.collection(db, 'adminDevices'), fsMod.where('uid', '==', auth.currentUser.uid)));
+  return snap.docs.map((d) => ({ id: d.id, label: d.data().label, enabled: d.data().enabled, lastSeenAt: d.data().lastSeenAt }));
+}
+
+export async function removeDevice(id) {
+  const { db, fsMod, app } = await loadSdk();
+  await fsMod.deleteDoc(fsMod.doc(db, 'adminDevices', id));
+  if (id === thisDeviceId()) {
+    try { localStorage.removeItem(DEVICE_KEY); } catch { /* ignore */ }
+    try { const m = await import(`${SDK}/firebase-messaging.js`); await m.deleteToken(m.getMessaging(app)); } catch { /* already gone */ }
+  }
+}
+
+export async function sendTestPush() {
+  const { functions, fnMod } = await loadSdk();
+  const { data } = await fnMod.httpsCallable(functions, 'sendTestPush')();
+  return data;
 }
 
 export async function signIn({ email, password }) {

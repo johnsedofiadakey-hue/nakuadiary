@@ -7,6 +7,7 @@ const { setGlobalOptions } = require('firebase-functions/v2');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
+const { getMessaging } = require('firebase-admin/messaging');
 
 const config = require('./src/config');
 const { createCheckout } = require('./src/checkout');
@@ -15,11 +16,13 @@ const { expireHolds } = require('./src/lifecycle');
 const { verifyTransaction } = require('./src/paystack');
 const { processOutboxDoc, OUTBOX } = require('./src/sms');
 const admin = require('./src/admin');
-const { log } = require('./src/util');
+const { log, requireAdmin } = require('./src/util');
+const push = require('./src/push');
 
 initializeApp();
 const db = getFirestore();
 const auth = getAuth();
+const messaging = getMessaging();
 
 setGlobalOptions({ region: config.REGION, maxInstances: 10 });
 
@@ -61,6 +64,21 @@ exports.sendOrderSms = onDocumentWritten({ document: `${OUTBOX}/{messageId}`, se
     smsEnabled: config.SMS_ENABLED.value(),
     senderIdParam: config.MNOTIFY_SENDER_ID.value(),
   });
+});
+
+// ---- Admin phone notifications -----------------------------------------------------
+
+/** Push "New order" to every admin phone when an order becomes paid (from any source). */
+exports.notifyAdminsOnPaidOrder = onDocumentWritten({ document: 'orders/{orderId}', retry: false }, async (event) => {
+  const before = event.data?.before?.data();
+  const after = event.data?.after?.data();
+  if (!after || after.status !== 'paid' || before?.status === 'paid') return;
+  await push.notifyAdminsOfPaidOrder(db, messaging, event.params.orderId, after);
+});
+
+exports.sendTestPush = onCall(async (request) => {
+  const uid = requireAdmin(request);
+  return push.sendTestPush(db, messaging, uid);
 });
 
 // ---- Admin -----------------------------------------------------------------------

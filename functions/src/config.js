@@ -25,7 +25,7 @@ const SMS_ENABLED = defineBoolean('SMS_ENABLED', {
   description: 'Send order SMS through MNotify. Keep false until the sender ID is approved.',
 });
 const CHECKOUT_ALLOWED_ORIGINS = defineString('CHECKOUT_ALLOWED_ORIGINS', {
-  default: 'https://nakuadiary.web.app,https://nakuadiary.firebaseapp.com',
+  default: 'https://nakuadiary.com,https://www.nakuadiary.com,https://nakuadiary.web.app,https://nakuadiary.firebaseapp.com',
   description: 'Comma-separated origins Paystack may redirect customers back to.',
 });
 const ENFORCE_APP_CHECK = defineBoolean('ENFORCE_APP_CHECK', {
