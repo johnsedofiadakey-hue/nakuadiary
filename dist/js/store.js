@@ -8,6 +8,31 @@ const SDK = 'https://www.gstatic.com/firebasejs/12.19.0';
 
 const wait = (value) => Promise.resolve(value);
 
+const positive = (...values) => values.find((value) => typeof value === 'number' && Number.isFinite(value) && value > 0);
+
+/**
+ * Per-length price and availability, using the same rules as the server's
+ * checkout (functions/src/checkout.js → unitPriceFor), so what shoppers see
+ * is what they're charged. `price` on the product becomes the "from" price.
+ */
+function withVariantPricing(product, rawVariants, wholesale) {
+  const variantDetails = rawVariants.map((v) => {
+    const price = wholesale
+      ? positive(v.wholesalePrice, product.wholesalePrice, v.price, product.price)
+      : positive(v.price, product.price);
+    const stock = Number.isFinite(v.stock) ? v.stock : null;
+    const soldOut = v.available === false || (product.inventoryPolicy !== 'continue' && stock !== null && stock <= 0);
+    return { id: v.id || v.label, label: v.label, price: price ?? 0, soldOut, lowStock: !soldOut && stock !== null && stock <= 3 ? stock : null };
+  });
+  const prices = variantDetails.filter((v) => !v.soldOut).map((v) => v.price).filter(Boolean);
+  const allPrices = variantDetails.map((v) => v.price).filter(Boolean);
+  return {
+    variantDetails,
+    price: Math.min(...(prices.length ? prices : allPrices.length ? allPrices : [product.price || 0])),
+    soldOut: variantDetails.length > 0 && variantDetails.every((v) => v.soldOut),
+  };
+}
+
 function readLines() {
   try { return JSON.parse(localStorage.getItem(CART_KEY) || '[]'); } catch { return []; }
 }
@@ -16,9 +41,13 @@ function saveLines(lines) { localStorage.setItem(CART_KEY, JSON.stringify(lines)
 // Local, device-only mock adapter. Used until dist/js/firebase-config.js is
 // filled in, so the storefront always works — in a checkout, in a demo, or
 // before a Firebase project exists.
+const withMockPricing = (p) => ({ ...p, ...withVariantPricing(p, p.variants.map((label) => ({ id: label, label })), false) });
+
 const mockStore = {
-  listProducts: ({ category, featured } = {}) => wait(products.filter((p) => (!category || p.category === category) && (!featured || ['silk-straight', 'body-wave', 'deep-curly'].includes(p.id)))),
-  getProduct: (id) => wait(products.find((p) => p.id === id) || null),
+  listProducts: ({ category, featured } = {}) => wait(products.filter((p) => (!category || p.category === category) && (!featured || ['silk-straight', 'body-wave', 'deep-curly'].includes(p.id))).map(withMockPricing)),
+  getProduct: (id) => { const p = products.find((item) => item.id === id); return wait(p ? withMockPricing(p) : null); },
+  watchOrder: (_id, callback) => { callback({ status: 'unavailable' }); return () => {}; },
+  resetPassword: () => Promise.reject(new Error('Password reset is available once the store is connected to Firebase.')),
   getCart: () => wait({ lines: readLines() }),
   addToCart: ({ productId, variant, quantity = 1 }) => {
     const lines = readLines(); const found = lines.find((line) => line.productId === productId && line.variant === variant);
@@ -45,8 +74,8 @@ async function createFirebaseStore() {
     import(`${SDK}/firebase-firestore.js`),
     import(`${SDK}/firebase-functions.js`),
   ]);
-  const { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, signOut: firebaseSignOut } = authMod;
-  const { getFirestore, collection, query, where, getDocs, doc, getDoc, setDoc, serverTimestamp } = fsMod;
+  const { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail, signOut: firebaseSignOut } = authMod;
+  const { getFirestore, collection, query, where, getDocs, doc, getDoc, setDoc, onSnapshot, serverTimestamp } = fsMod;
   const { getFunctions, httpsCallable } = fnMod;
 
   const app = initializeApp(firebaseConfig);
@@ -102,7 +131,7 @@ async function createFirebaseStore() {
 
   function mapProduct(id, data) {
     const variants = data.variants || [];
-    const price = isWholesale && typeof data.wholesalePrice === 'number' ? data.wholesalePrice : data.price;
+    const pricing = withVariantPricing(data, variants, isWholesale);
     const images = Array.isArray(data.images) && data.images.length
       ? data.images.filter((image) => image?.url)
       : (data.image?.url ? [data.image] : []);
@@ -113,11 +142,14 @@ async function createFirebaseStore() {
       name: data.name,
       category: data.category,
       type: data.type,
-      price,
+      price: pricing.price,
+      variantDetails: pricing.variantDetails,
+      soldOut: pricing.soldOut,
       compareAt: data.compareAt,
       badge: data.badges?.[0],
       description: data.description,
       details: data.details || [],
+      tags: Array.isArray(data.tags) ? data.tags.filter((tag) => typeof tag === 'string' && tag.trim()) : [],
       variants: variants.map((v) => v.label),
       image: cover.url,
       images,
@@ -192,7 +224,9 @@ async function createFirebaseStore() {
       const { data } = await createCheckoutFn({
         lines: lines.map(({ productId, variantId, quantity }) => ({ productId, variantId, quantity })),
         customer,
-        callbackUrl: `${window.location.origin}${window.location.pathname}`,
+        // Paystack returns the customer here with ?reference=<orderId>; the page
+        // waits for the verified webhook — the redirect itself proves nothing.
+        callbackUrl: `${window.location.origin}/order`,
       });
       return data;
     },
@@ -203,6 +237,22 @@ async function createFirebaseStore() {
     signOut: async () => {
       await firebaseSignOut(auth);
       await waitForUser((u) => u.isAnonymous); // the listener starts the new guest session
+    },
+    /**
+     * Live view of one of *this device's* orders (rules only allow the buyer's
+     * own uid). Calls back with the order, { status: 'not_found' } or { status: 'unavailable' }.
+     */
+    watchOrder: (orderId, callback) => {
+      let stop = () => {};
+      let cancelled = false;
+      ensureReady().then(() => {
+        if (cancelled) return;
+        stop = onSnapshot(doc(db, 'orders', orderId), (snap) => callback(snap.exists() ? { id: snap.id, ...snap.data() } : { status: 'not_found' }), () => callback({ status: 'not_found' }));
+      }).catch(() => callback({ status: 'unavailable' }));
+      return () => { cancelled = true; stop(); };
+    },
+    resetPassword: async (email) => {
+      await sendPasswordResetEmail(auth, String(email || '').trim(), { url: `${window.location.origin}/` });
     },
     getAccount: async () => {
       await ensureReady();

@@ -19,6 +19,20 @@ function linesField(name, label, values, hint = 'One per line.') {
   return `<label class="field">${label}<textarea name="${name}" data-kind="lines" rows="${Math.max(2, values.length + 1)}">${esc(values.join('\n'))}</textarea><small class="field-hint">${hint}</small></label>`;
 }
 
+function selectField(name, label, value, options, hint = '') {
+  return `<label class="field">${label}<select name="${name}">${options.map(([v, text]) => `<option value="${esc(v)}" ${v === value ? 'selected' : ''}>${esc(text)}</option>`).join('')}</select>${hint ? `<small class="field-hint">${hint}</small>` : ''}</label>`;
+}
+
+function numberField(name, label, value, { hint = '', min = 0, max = 100000, step = '0.01' } = {}) {
+  return `<label class="field">${label}<input name="${name}" type="number" data-kind="number" min="${min}" max="${max}" step="${step}" inputmode="decimal" value="${esc(value)}" />${hint ? `<small class="field-hint">${hint}</small>` : ''}</label>`;
+}
+
+/** Delivery areas as "Area | fee" lines — easier on a phone than a table editor. */
+function zonesField(name, label, zones) {
+  const text = (zones || []).map((z) => `${z.name} | ${z.fee}`).join('\n');
+  return `<label class="field">${label}<textarea name="${name}" data-kind="zones" rows="${Math.max(3, (zones || []).length + 1)}" placeholder="East Legon | 30&#10;Tema | 45&#10;Kumasi | 80">${esc(text)}</textarea><small class="field-hint">One area per line: <code>Area | fee in GHS</code>. Customers pick their area at checkout.</small></label>`;
+}
+
 function toggleField(name, label, checked) {
   return `<label class="field checkbox"><input name="${name}" type="checkbox" data-kind="bool" ${checked ? 'checked' : ''} /> ${label}</label>`;
 }
@@ -92,7 +106,10 @@ export function homepageViewHtml(home) {
           ${linesField('hero.badges', 'Badges under the hero', hero.badges)}
         </div>
         <div>
-          ${imageField('hero.image', 'Hero photo', hero.image, { hint: 'Portrait photos work best (4:5).', defaultUrl: DEFAULT_HOME.hero.image.url, wide: true })}
+          ${imageField('hero.image', 'Hero photo (mobile)', hero.image, { hint: 'Portrait photos work best (4:5). This loads first on phones.', defaultUrl: DEFAULT_HOME.hero.image.url, wide: true })}
+          ${imageField('hero.desktopImage', 'Hero photo (desktop)', hero.desktopImage, { hint: 'Wide images work best (21:9). This prevents a portrait photo from being cropped on large screens.', defaultUrl: DEFAULT_HOME.hero.desktopImage.url, wide: true })}
+          ${textField('hero.videoUrl', 'Hero video link', hero.videoUrl || '', { hint: 'Optional. A short, silent MP4 (under 40 MB, ideally under 8 MB). Upload it below or paste a link; clear the box to remove it. The photo above stays as the fast-loading fallback.' })}
+          <div class="cms-image-actions video-actions"><label class="btn secondary upload-button">Upload video<input type="file" accept="video/mp4" data-cms-video-upload /></label><small class="cms-upload-status" data-cms-video-status></small></div>
           ${toggleField('hero.showLogoPanel', 'Show the floating logo card on the photo', hero.showLogoPanel)}
           ${imageField('hero.logoPanelImage', 'Floating logo card', hero.logoPanelImage, { defaultUrl: DEFAULT_HOME.hero.logoPanelImage.url })}
           ${textField('hero.motionLabel', 'Photo tag', hero.motionLabel, { hint: 'Small label on the top corner of the photo. Leave empty to hide.' })}
@@ -189,6 +206,31 @@ export function settingsViewHtml(settings) {
       ${textField('announcement.text', 'Message', announcement.text)}
       ${textField('announcement.link', 'Link (optional)', announcement.link, { placeholder: '/shop' })}`, { toggleName: 'announcement.enabled', toggleOn: announcement.enabled })}
 
+    ${card('Delivery', 'How delivery is priced at checkout. Pickup is always free. The fee is added to the Paystack payment.', `
+      ${selectField('delivery.mode', 'Delivery pricing', settings.delivery.mode, [
+        ['arranged', 'Arrange after the order (no fee charged online)'],
+        ['free', 'Free delivery'],
+        ['flat', 'One flat fee'],
+        ['zones', 'Fee by area'],
+      ], 'Choose “Fee by area” to list the places you deliver to with their prices.')}
+      <div class="field-row">
+        ${numberField('delivery.flatFee', 'Flat fee (GHS)', settings.delivery.flatFee, { hint: 'Used with “One flat fee”.' })}
+        ${numberField('delivery.freeOver', 'Free delivery over (GHS)', settings.delivery.freeOver, { hint: '0 = no free-delivery threshold.' })}
+      </div>
+      ${zonesField('delivery.zones', 'Delivery areas and fees', settings.delivery.zones)}
+      <div class="field-row">
+        ${textField('delivery.pickupAddress', 'Pickup location', settings.delivery.pickupAddress, { placeholder: 'e.g. Shop 12, Accra Mall, Spintex Road' })}
+        ${textField('delivery.pickupHours', 'Pickup hours', settings.delivery.pickupHours, { placeholder: 'e.g. Mon–Sat, 10am–6pm' })}
+      </div>`)}
+
+    ${card('Policies', 'Used on the Delivery and Returns pages linked in the footer.', `
+      <div class="field-row three">
+        ${numberField('policies.returnWindowDays', 'Return window (days)', settings.policies.returnWindowDays, { step: '1', max: 60 })}
+        ${textField('policies.dispatchTime', 'Dispatch time', settings.policies.dispatchTime, { placeholder: '1–2 working days' })}
+        ${textField('policies.lastUpdated', 'Policies last updated', settings.policies.lastUpdated, { type: 'date' })}
+      </div>
+      <p class="field-hint">Preview: <a href="/delivery" target="_blank" rel="noopener">Delivery</a> · <a href="/refunds" target="_blank" rel="noopener">Returns</a> · <a href="/privacy" target="_blank" rel="noopener">Privacy</a> · <a href="/terms" target="_blank" rel="noopener">Terms</a></p>`)}
+
     ${card('Checkout & footer', '', `
       ${textField('shop.deliveryNote', 'Delivery note in the shopping bag', shop.deliveryNote, { multiline: true })}
       ${textField('footer.tagline', 'Footer tagline', footer.tagline)}
@@ -233,6 +275,11 @@ export function collectCmsForm(form, base) {
     const kind = el.dataset.kind;
     const value = kind === 'bool' ? el.checked
       : kind === 'lines' ? el.value.split('\n').map((line) => line.trim()).filter(Boolean)
+      : kind === 'number' ? (el.value.trim() === '' ? 0 : Number(el.value))
+      : kind === 'zones' ? el.value.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
+        const [name, fee] = line.split('|').map((part) => (part || '').trim());
+        return { name, fee: Number(String(fee).replace(/[^0-9.]/g, '')), raw: line };
+      })
       : el.value.trim();
     setPath(data, el.name, value);
   }
@@ -247,6 +294,7 @@ export function validateCms(kind, data) {
     const links = [data.hero.primaryCta.href, data.hero.secondaryCta.href, data.newsletter.ctaHref];
     if (!links.every(isSafeLink)) return 'Button links must start with /, https://, mailto: or tel:.';
     if (!data.hero.headline) return 'The hero needs a headline.';
+    if (data.hero.videoUrl && !/^(https:\/\/|\/(?!\/))/i.test(data.hero.videoUrl)) return 'The hero video link must start with https://.';
     return '';
   }
   // Accept local Ghana format (024 123 4567) and store it wa.me-ready (233241234567).
@@ -259,6 +307,13 @@ export function validateCms(kind, data) {
   if (!isSafeLink(data.announcement.link)) return 'The announcement link must start with / or https://.';
   if (data.announcement.enabled && !data.announcement.text) return 'Add a message for the announcement bar, or switch it off.';
   if (!isHexColour(data.theme.accent) || !isHexColour(data.theme.accentDark)) return 'Choose valid brand colours.';
+  const d = data.delivery;
+  const badZone = d.zones.find((z) => !z.name || z.name.length > 60 || !Number.isFinite(z.fee) || z.fee < 0 || !String(z.raw).includes('|'));
+  if (badZone) return `Delivery area “${badZone.raw}” should look like “East Legon | 30”.`;
+  d.zones = d.zones.map(({ name, fee }) => ({ name, fee: Math.round(fee * 100) / 100 }));
+  if (d.mode === 'zones' && !d.zones.length) return 'Add at least one delivery area, or choose a different delivery pricing option.';
+  if (![d.flatFee, d.freeOver].every((n) => Number.isFinite(n) && n >= 0)) return 'Delivery fees must be 0 or more.';
+  if (!Number.isInteger(data.policies.returnWindowDays) || data.policies.returnWindowDays < 0) return 'The return window must be a whole number of days.';
   return '';
 }
 

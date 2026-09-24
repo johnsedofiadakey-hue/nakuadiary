@@ -26,13 +26,29 @@ export const DEFAULT_SETTINGS = {
   shop: {
     deliveryNote: 'Delivery arrangements are confirmed before your order is dispatched.',
   },
+  // Checkout delivery pricing. The server (functions/src/delivery.js) applies
+  // the same rules — this copy is only for showing the fee before payment.
+  delivery: {
+    mode: 'arranged', // 'arranged' (fee confirmed after ordering) | 'free' | 'flat' | 'zones'
+    flatFee: 0,
+    freeOver: 0, // 0 = no free-delivery threshold
+    zones: [], // [{ name: 'East Legon', fee: 30 }]
+    pickupAddress: '',
+    pickupHours: '',
+  },
+  // Used in the Refunds and Delivery policy pages.
+  policies: {
+    returnWindowDays: 3,
+    dispatchTime: '1–2 working days',
+    lastUpdated: '2026-09-24',
+  },
   footer: {
     tagline: 'Wigs, bundles, extensions & accessories',
     showAdminLink: true,
   },
   theme: {
-    accent: '#d9799d',
-    accentDark: '#b85678',
+    accent: '#b86b61',
+    accentDark: '#7c3b35',
   },
   seo: {
     title: 'Nakuadiary — Wigs, bundles & extensions',
@@ -50,23 +66,27 @@ export const DEFAULT_HOME = {
     body: 'Shop ready-to-wear wigs, bundles and extensions with clear Ghana cedi prices. Choose your texture, select a length, and order straight from your phone.',
     primaryCta: { label: 'Shop hair now', href: '/shop' },
     secondaryCta: { label: 'Wholesale pricing', href: '/wholesale' },
-    image: { url: 'https://images.pexels.com/photos/17746098/pexels-photo-17746098.jpeg?auto=compress&cs=tinysrgb&w=1000', alt: 'Model with long, defined curly hair' },
-    showLogoPanel: true,
+    image: { url: '/assets/campaign/nakuadiary-hero-poster-v1.webp', alt: 'Nakuadiary campaign model with long loose-wave human hair' },
+    desktopImage: { url: '/assets/campaign/nakuadiary-hero-desktop-v1.webp', alt: 'Nakuadiary campaign model with long loose-wave human hair and bundles' },
+    // Upload a short, silent .mp4 to Firebase Storage, then paste its public
+    // URL in Admin → Homepage to replace the animated poster with a real loop.
+    videoUrl: '',
+    showLogoPanel: false,
     logoPanelImage: { url: '/assets/nakuadiary-logo.png', alt: 'Nakuadiary — Look Good, Feel Confident.' },
-    motionLabel: 'Human hair · Ghana',
-    badges: ['Prices in GHS', 'Guest checkout', 'MoMo & card checkout'],
+    motionLabel: 'Hair in motion',
+    badges: ['GHS prices', 'MoMo & card', 'Delivery / pickup'],
   },
   categories: {
     show: true,
-    eyebrow: 'Start here',
-    title: 'What are you shopping for?',
+    eyebrow: 'The Nakuadiary edit',
+    title: 'Shop by *category.*',
     // Fixed to the four catalog categories (same order as data.js) — the
     // tile links to /shop?category=<id>, so only copy and photo are editable.
     tiles: [
-      { id: 'wigs', label: 'Wigs', detail: 'Ready-to-wear confidence.', image: { url: 'https://images.pexels.com/photos/17746098/pexels-photo-17746098.jpeg?auto=compress&cs=tinysrgb&w=900', alt: 'Model wearing long defined curly hair' } },
-      { id: 'bundles', label: 'Bundles', detail: 'Choose your texture and length.', image: { url: 'https://images.pexels.com/photos/2269878/pexels-photo-2269878.jpeg?auto=compress&cs=tinysrgb&w=900', alt: 'Studio portrait with long dark wavy hair' } },
-      { id: 'extensions', label: 'Extensions', detail: 'Add length without the commitment.', image: { url: 'https://images.pexels.com/photos/17291688/pexels-photo-17291688.jpeg?auto=compress&cs=tinysrgb&w=900', alt: 'Woman with long sleek hair in a studio portrait' } },
-      { id: 'accessories', label: 'Accessories', detail: 'The finishing details.', image: { url: 'https://images.pexels.com/photos/11292329/pexels-photo-11292329.jpeg?auto=compress&cs=tinysrgb&w=900', alt: 'Lifestyle portrait with long styled hair' } },
+      { id: 'wigs', label: 'Wigs', detail: 'Ready-to-wear luxury.', image: { url: '/assets/campaign/nakuadiary-wigs-v1.webp', alt: 'Long loose-wave lace-front wig on a mannequin' } },
+      { id: 'bundles', label: 'Bundles', detail: 'Texture you can feel.', image: { url: '/assets/campaign/nakuadiary-bundles-v1.webp', alt: 'Three loose-wave human hair bundles' } },
+      { id: 'extensions', label: 'Extensions', detail: 'Length that blends beautifully.', image: { url: '/assets/campaign/nakuadiary-extensions-v1.webp', alt: 'Long loose-wave hair extensions shown from the back' } },
+      { id: 'accessories', label: 'Accessories', detail: 'The finishing details.', image: { url: '/assets/campaign/nakuadiary-accessories-v1.webp', alt: 'Silk bonnet, scrunchie, comb and edge brush' } },
     ],
   },
   paths: {
@@ -114,6 +134,7 @@ const isPlainObject = (value) => value !== null && typeof value === 'object' && 
 export function mergeContent(defaults, saved) {
   if (Array.isArray(defaults)) {
     if (!Array.isArray(saved)) return structuredClone(defaults);
+    if (!defaults.length) return structuredClone(saved.filter((item) => item !== null && item !== undefined)); // open-ended lists (delivery zones): shape is validated by the reader
     if (defaults.length && isPlainObject(defaults[0])) return defaults.map((item, index) => mergeContent(item, saved[index]));
     return saved.filter((item) => typeof item === typeof (defaults[0] ?? ''));
   }
