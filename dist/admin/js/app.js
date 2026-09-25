@@ -1126,8 +1126,11 @@ function notificationsViewHtml(cfg = {}, devices = []) {
     <section class="cms-card"><header class="cms-card-head"><div><h2>Sending</h2><p>Your sender ID must be approved in your MNotify/BMS dashboard first. Texting is also switched on or off on the server by your developer (the SMS_ENABLED setting); until then, texts show as “Not sent (SMS off)” on each order and can be resent later.</p></div>
       <label class="switch"><input name="enabled" type="checkbox" ${cfg.enabled !== false ? 'checked' : ''} /><span>On</span></label></header>
       <div class="cms-card-body"><div class="field-row">
-        <label class="field">Sender ID<input name="senderId" maxlength="11" value="${esc(cfg.senderId || '')}" placeholder="e.g. NAKUADIARY" /><small class="field-hint">Up to 11 letters/numbers — the name customers see.</small></label>
-      </div></div></section>
+        <label class="field">Sender ID<input name="senderId" maxlength="11" value="${esc(cfg.senderId || '')}" placeholder="nakuadiary" /><small class="field-hint">Up to 11 letters/numbers — the name customers see. Must match BMS exactly. Leave empty to use the one set up by your developer.</small></label>
+      </div>
+      <div class="test-sms"><label class="field">Send a test text to<input data-test-sms-phone inputmode="tel" value="${esc(cfg.ownerPhone ? `0${String(cfg.ownerPhone).replace(/^233/, '')}` : '')}" placeholder="e.g. 024 123 4567" /></label><button type="button" class="btn secondary" data-send-test-sms>Send a test text</button></div>
+      <p class="test-sms-result" data-test-sms-result></p>
+      <small class="field-hint">Save any changes first. Up to 5 test texts an hour; each uses one SMS credit.</small></div></section>
     <section class="cms-card"><header class="cms-card-head"><div><h2>New-order text to you</h2><p>Also get an SMS on your own phone every time an order is paid — works even without mobile data.</p></div>
       <label class="switch"><input name="ownerAlerts" type="checkbox" ${cfg.ownerAlerts !== false ? 'checked' : ''} /><span>On</span></label></header>
       <div class="cms-card-body"><div class="field-row"><label class="field">Your phone number<input name="ownerPhone" inputmode="tel" value="${esc(cfg.ownerPhone || '')}" placeholder="e.g. 024 123 4567" /></label></div></div></section>
@@ -1189,6 +1192,20 @@ document.addEventListener('click', async (event) => {
       const result = await adminStore.sendTestPush();
       toast(result.sent ? 'Test sent — it should arrive in a few seconds.' : 'No devices received it. Tap Refresh and try again.');
     } catch (err) { toast(err?.message || 'Could not send a test.'); }
+    btn.disabled = false;
+    return;
+  }
+  if (event.target.closest('[data-send-test-sms]')) {
+    const btn = event.target.closest('[data-send-test-sms]');
+    const out = document.querySelector('[data-test-sms-result]');
+    btn.disabled = true; out.className = 'test-sms-result'; out.textContent = 'Sending…';
+    try {
+      const result = await adminStore.sendTestSms(document.querySelector('[data-test-sms-phone]').value);
+      out.textContent = result.ok ? `✓ ${result.message} It should arrive within a minute.` : result.message;
+      out.classList.add(result.ok ? 'is-ok' : 'is-error');
+    } catch (err) {
+      out.textContent = err?.message || 'Could not send the test.'; out.classList.add('is-error');
+    }
     btn.disabled = false;
     return;
   }

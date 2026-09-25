@@ -168,4 +168,40 @@ async function processOutboxDoc(db, docId, { apiKey, smsEnabled, senderIdParam }
   return result.uncertain ? 'unknown' : 'failed';
 }
 
-module.exports = { OUTBOX, DEFAULT_TEMPLATES, OWNER_TEMPLATE, outboxId, outboxRef, prepareSms, renderTemplate, toRecipient, loadSmsConfig, sendQuickSms, processOutboxDoc };
+const TEST_LIMIT_PER_HOUR = 5;
+
+/**
+ * Admin "Send a test text": one SMS straight to a chosen number (not via the
+ * outbox), max 5 per admin per hour so it can't drain SMS credit. Returns
+ * MNotify's verdict so a wrong/unapproved sender ID is obvious.
+ */
+async function sendTestSms(db, { uid, phone, apiKey, smsEnabled, senderIdParam }) {
+  const digits = normalizePhone(phone);
+  if (!/^\d{9,15}$/.test(digits)) return { ok: false, reason: 'invalid_phone', message: 'Enter a valid phone number, e.g. 024 123 4567.' };
+  const config = await loadSmsConfig(db, { senderIdParam });
+  if (!smsEnabled) return { ok: false, reason: 'sms_disabled', message: 'Texting is switched off on the server (SMS_ENABLED).' };
+  if (!config.enabled) return { ok: false, reason: 'sms_disabled', message: 'Texting is switched off in Notifications → Sending.' };
+  if (!config.senderId) return { ok: false, reason: 'no_sender', message: 'Add your approved sender ID first.' };
+  if (!apiKey) return { ok: false, reason: 'no_key', message: 'The MNotify API key is missing on the server.' };
+
+  const limitRef = db.collection('smsTests').doc(uid);
+  const allowed = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(limitRef);
+    const now = Date.now();
+    const data = snap.exists ? snap.data() : { windowStart: now, count: 0 };
+    const fresh = now - data.windowStart > 3600 * 1000;
+    const count = fresh ? 0 : data.count;
+    if (count >= TEST_LIMIT_PER_HOUR) return false;
+    tx.set(limitRef, { windowStart: fresh ? now : data.windowStart, count: count + 1, lastAt: FieldValue.serverTimestamp() });
+    return true;
+  });
+  if (!allowed) return { ok: false, reason: 'rate_limited', message: 'That’s 5 test texts this hour — please wait a little and try again.' };
+
+  const result = await sendQuickSms({ apiKey, senderId: config.senderId, recipient: toRecipient(digits), message: `Nakuadiary test: order texts are working. Sender ID "${config.senderId}" is set up correctly.` });
+  log.info('test sms', { uid, ok: result.ok, code: result.error?.code || result.provider?.code });
+  return result.ok
+    ? { ok: true, senderId: config.senderId, to: maskPhone(digits), campaignId: result.provider.campaignId, message: `Sent to ${maskPhone(digits)} from “${config.senderId}”.` }
+    : { ok: false, reason: 'provider', senderId: config.senderId, code: result.error.code, message: `MNotify said: ${result.error.message} (code ${result.error.code}). If this mentions the sender, check “${config.senderId}” is approved in BMS and spelled exactly the same.` };
+}
+
+module.exports = { sendTestSms, OUTBOX, DEFAULT_TEMPLATES, OWNER_TEMPLATE, outboxId, outboxRef, prepareSms, renderTemplate, toRecipient, loadSmsConfig, sendQuickSms, processOutboxDoc };

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { createCheckout } = require('../src/checkout');
 const { markPaid } = require('../src/lifecycle');
 const { updateOrderStatus, resendOrderSms } = require('../src/admin');
-const { processOutboxDoc, renderTemplate, toRecipient } = require('../src/sms');
+const { processOutboxDoc, renderTemplate, toRecipient, sendTestSms } = require('../src/sms');
 const h = require('./helpers');
 
 const smsOpts = { apiKey: 'mnotify-test-key', smsEnabled: true, senderIdParam: 'NAKUADIARY' };
@@ -196,4 +196,32 @@ test('owner alerts can be switched off in config/sms', async () => {
   await h.db.collection('config').doc('sms').set({ ownerPhone: '0209998888', ownerAlerts: false });
   const f = h.fakeFetch({});
   try { assert.equal(await processOutboxDoc(h.db, `${orderId}_owner_paid`, smsOpts), 'skipped'); assert.equal(f.calls.length, 0); } finally { f.restore(); }
+});
+
+test('test text: sends once to the chosen number, reports MNotify errors, and is rate limited', async () => {
+  const opts = { uid: 'admin-1', apiKey: 'mnotify-test-key', smsEnabled: true, senderIdParam: 'nakuadiary' };
+  assert.equal((await sendTestSms(h.db, { ...opts, phone: 'abc' })).reason, 'invalid_phone');
+  assert.equal((await sendTestSms(h.db, { ...opts, smsEnabled: false, phone: '0241234567' })).reason, 'sms_disabled');
+  let f = h.fakeFetch({ 'sms/quick': mnotifyOk });
+  try {
+    const ok = await sendTestSms(h.db, { ...opts, phone: '024 123 4567' });
+    assert.equal(ok.ok, true);
+    assert.equal(ok.to, '024****567');
+    const body = JSON.parse(f.calls[0].init.body);
+    assert.deepEqual(body.recipient, ['0241234567']);
+    assert.equal(body.sender, 'nakuadiary');
+  } finally { f.restore(); }
+  f = h.fakeFetch({ 'sms/quick': () => ({ status: 200, json: { status: 'error', code: '1005', message: 'Sender ID not approved' } }) });
+  try {
+    const bad = await sendTestSms(h.db, { ...opts, phone: '0241234567' });
+    assert.equal(bad.ok, false);
+    assert.match(bad.message, /Sender ID not approved.*1005/);
+    assert.ok(!JSON.stringify(bad).includes('mnotify-test-key'));
+  } finally { f.restore(); }
+  f = h.fakeFetch({ 'sms/quick': mnotifyOk });
+  try {
+    for (let i = 0; i < 3; i += 1) await sendTestSms(h.db, { ...opts, phone: '0241234567' });
+    assert.equal((await sendTestSms(h.db, { ...opts, phone: '0241234567' })).reason, 'rate_limited');
+    assert.equal(f.calls.length, 3);
+  } finally { f.restore(); }
 });

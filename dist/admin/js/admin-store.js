@@ -318,6 +318,12 @@ export async function saveSmsConfig({ enabled, senderId, ownerAlerts, ownerPhone
   });
 }
 
+export async function sendTestSms(phone) {
+  const { functions, fnMod } = await loadSdk();
+  const { data } = await fnMod.httpsCallable(functions, 'sendTestSms')({ phone });
+  return data;
+}
+
 export async function sendPasswordReset(email) {
   const { auth, authMod } = await loadSdk();
   await authMod.sendPasswordResetEmail(auth, String(email || '').trim(), { url: `${window.location.origin}/admin` });

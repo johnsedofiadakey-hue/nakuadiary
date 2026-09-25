@@ -230,6 +230,7 @@ export const GUIDE = [
         '<strong>Sender ID</strong> — the name customers see (up to 11 letters), approved in your MNotify/BMS account.',
         '<strong>New-order text to you</strong> — your phone number.',
         '<strong>Message wording</strong> — change any message, or leave it empty to use the default shown in grey.',
+        'Tap <strong>Save changes</strong>, then use <strong>Send a test text</strong> to check it arrives on your phone. If it fails, the message tells you why (usually the sender ID isn’t approved yet or is spelled differently in BMS).',
       ])}
       <p>Each order shows its texts under <strong>Customer texts (SMS)</strong>. If one says <em>Failed</em> or <em>Not sent</em>, tap <strong>Resend</strong>.</p>`,
   },

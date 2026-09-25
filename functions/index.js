@@ -14,7 +14,7 @@ const { createCheckout } = require('./src/checkout');
 const { handlePaystackWebhook } = require('./src/webhook');
 const { expireHolds } = require('./src/lifecycle');
 const { verifyTransaction } = require('./src/paystack');
-const { processOutboxDoc, OUTBOX } = require('./src/sms');
+const { processOutboxDoc, sendTestSms, OUTBOX } = require('./src/sms');
 const admin = require('./src/admin');
 const { log, requireAdmin } = require('./src/util');
 const push = require('./src/push');
@@ -82,6 +82,18 @@ exports.sendTestPush = onCall(async (request) => {
 });
 
 // ---- Admin -----------------------------------------------------------------------
+
+/** Admin "Send a test text" (Notifications screen). */
+exports.sendTestSms = onCall({ secrets: [config.MNOTIFY_API_KEY] }, (request) => {
+  const uid = requireAdmin(request);
+  return sendTestSms(db, {
+    uid,
+    phone: typeof request.data?.phone === 'string' ? request.data.phone.slice(0, 24) : '',
+    apiKey: config.MNOTIFY_API_KEY.value(),
+    smsEnabled: config.SMS_ENABLED.value(),
+    senderIdParam: config.MNOTIFY_SENDER_ID.value(),
+  });
+});
 
 exports.updateOrderStatus = onCall((request) => admin.updateOrderStatus(request, { db }));
 exports.resendOrderSms = onCall((request) => admin.resendOrderSms(request, { db }));
