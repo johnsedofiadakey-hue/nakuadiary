@@ -232,7 +232,7 @@ export function settingsViewHtml(settings) {
       <p class="field-hint">Preview: <a href="/delivery" target="_blank" rel="noopener">Delivery</a> · <a href="/refunds" target="_blank" rel="noopener">Returns</a> · <a href="/privacy" target="_blank" rel="noopener">Privacy</a> · <a href="/terms" target="_blank" rel="noopener">Terms</a></p>`)}
 
     ${card('Checkout & footer', '', `
-      ${textField('shop.deliveryNote', 'Delivery note in the shopping bag', shop.deliveryNote, { multiline: true })}
+      ${textField('shop.deliveryNote', 'Delivery note in the cart', shop.deliveryNote, { multiline: true })}
       ${textField('footer.tagline', 'Footer tagline', footer.tagline)}
       ${toggleField('footer.showAdminLink', 'Show the small “Admin login” link in the footer', footer.showAdminLink)}`)}
 

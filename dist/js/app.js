@@ -41,7 +41,7 @@ function productCard(product) {
       <h3><a href="/product?id=${product.id}">${product.name}</a></h3>
       <p class="product-lengths">${product.variants.join(' · ')}</p>
       ${product.soldOut ? '<strong class="sold-out-label">Sold out</strong>' : `<strong>From ${money(product.price)}</strong>`}
-      <a class="underlined" href="/product?id=${product.id}">Choose length →</a>
+      <a class="underlined" href="/product?id=${product.id}">View product →</a>
     </div>
   </article>`;
 }
@@ -79,7 +79,7 @@ function headerHtml() {
     <nav class="site-nav" id="site-nav">${nav.map((n) => `<a href="${n.href}" class="${page === n.key ? 'is-active' : ''}">${n.label}</a>`).join('')}</nav>
     <div class="header-actions">
       <div class="account-area" data-account-area></div>
-      <button class="bag-button" type="button" data-open-cart aria-label="Open bag">Bag <span data-cart-count>0</span></button>
+      <button class="bag-button" type="button" data-open-cart aria-label="Open cart">Cart <span data-cart-count>0</span></button>
     </div>
   </header>`;
 }
@@ -98,12 +98,12 @@ function footerHtml() {
 function chromeExtrasHtml() {
   return `<div class="overlay" hidden data-overlay></div>
   <aside class="cart" data-cart aria-hidden="true">
-    <header><h2>Your bag</h2><button type="button" data-close-cart aria-label="Close bag">×</button></header>
+    <header><h2>Your cart</h2><button type="button" data-close-cart aria-label="Close cart">×</button></header>
     <div data-cart-lines></div>
     <footer>
       <p class="cart-total"><span>Subtotal</span><strong data-cart-total>${money(0)}</strong></p>
       <p class="delivery-note">${esc(settings.shop.deliveryNote)}</p>
-      <button class="btn wide" type="button" data-open-checkout>Continue to checkout</button>
+      <button class="btn wide" type="button" data-open-checkout>Checkout</button>
     </footer>
   </aside>
   <dialog class="account-dialog" data-account-dialog>
@@ -122,8 +122,8 @@ function chromeExtrasHtml() {
   <dialog class="checkout-dialog" data-checkout-dialog>
     <button class="dialog-close" type="button" data-close-checkout aria-label="Close checkout">×</button>
     <form data-checkout-form>
-      <p class="eyebrow">Guest checkout</p>
-      <h2>Your order <em>details</em></h2>
+      <p class="eyebrow">Checkout</p>
+      <h2>Your <em>details</em></h2>
       <p class="checkout-intro">We use these details to prepare and confirm your order.</p>
       <label>Full name<input name="name" autocomplete="name" required /></label>
       <label>WhatsApp / phone number<input name="phone" inputmode="tel" autocomplete="tel" placeholder="e.g. 024 000 0000" required /></label>
@@ -132,7 +132,7 @@ function chromeExtrasHtml() {
       <label data-delivery-address-field>Town, area or landmark<textarea name="deliveryAddress" rows="2" placeholder="Tell us where to arrange your order" required></textarea></label>
       <div class="checkout-summary" data-checkout-summary></div>
       <p class="checkout-note">You will be taken to a secure payment page for Mobile Money or card payment.</p>
-      <button class="btn wide" type="submit">Continue to payment</button>
+      <button class="btn wide" type="submit">Pay now</button>
     </form>
   </dialog>
   <div class="toast" data-toast aria-live="polite"></div>`;
@@ -197,7 +197,7 @@ async function renderCart() {
   document.querySelector('[data-cart-total]').textContent = money(total);
   document.querySelector('[data-cart-lines]').innerHTML = valid.length
     ? valid.map((line) => `<article class="cart-line"><img src="${line.product.image}" alt="" /><div><p>${productType(line.product)}</p><h3>${line.product.name}</h3><strong>${line.variant} · ${money(unitPrice(line))}</strong></div><div class="quantity"><button type="button" data-line-change="-1" data-product="${line.productId}" data-line-variant="${line.variant}" aria-label="Reduce quantity">−</button><span>${line.quantity}</span><button type="button" data-line-change="1" data-product="${line.productId}" data-line-variant="${line.variant}" aria-label="Increase quantity">+</button></div></article>`).join('')
-    : '<p class="empty">Your bag is waiting for its first piece.</p>';
+    : '<p class="empty">Your cart is empty.</p>';
 }
 
 async function renderAccount() {
@@ -364,7 +364,7 @@ function renderShopGrid() {
   const filtered = shopItemsCache.filter((p) => inCategory(p)
     && (activeTag === 'all' || (p.tags || []).some((tag) => sameTag(tag, activeTag)))
     && (!term || p.name.toLowerCase().includes(term) || (p.tags || []).some((tag) => tag.toLowerCase().includes(term))));
-  grid.innerHTML = filtered.length ? filtered.map(productCard).join('') : '<p class="empty-products">No pieces found. Try another search or category.</p>';
+  grid.innerHTML = filtered.length ? filtered.map(productCard).join('') : '<p class="empty-products">No products found. Try another search or category.</p>';
 }
 
 // ---- Page: product ------------------------------------------------------
@@ -397,8 +397,8 @@ async function renderProductPage() {
       <p class="description">${activeProduct.description}</p>
       <ul>${productDetails(activeProduct).map((d) => `<li>${d}</li>`).join('')}</ul>
       ${activeProduct.tags?.length ? `<p class="product-tags">${activeProduct.tags.map((tag) => `<a href="/shop?tag=${encodeURIComponent(tag)}">${esc(tag)}</a>`).join('')}</p>` : ''}
-      <fieldset><legend>Choose your length</legend><div class="variant-options">${choices.map((v) => `<button type="button" data-variant="${esc(v.label)}" data-price="${esc(v.price)}" class="${v === firstChoice ? 'selected' : ''} ${v.soldOut ? 'is-sold-out' : ''}" ${v.soldOut ? 'disabled aria-disabled="true"' : ''}>${esc(v.label)}${v.soldOut ? '<small>Sold out</small>' : v.lowStock ? `<small>Only ${esc(v.lowStock)} left</small>` : ''}</button>`).join('')}</div></fieldset>
-      ${firstChoice ? '<button class="btn wide" type="button" data-add-product>Add to bag</button>' : `<button class="btn wide" type="button" disabled>Sold out</button><a class="btn outline wide notify-link" href="${waLink(`Hi! Please let me know when ${activeProduct.name} is back in stock.`)}" target="_blank" rel="noopener">Ask about restock on WhatsApp</a>`}
+      <fieldset><legend>Choose a length</legend><div class="variant-options">${choices.map((v) => `<button type="button" data-variant="${esc(v.label)}" data-price="${esc(v.price)}" class="${v === firstChoice ? 'selected' : ''} ${v.soldOut ? 'is-sold-out' : ''}" ${v.soldOut ? 'disabled aria-disabled="true"' : ''}>${esc(v.label)}${v.soldOut ? '<small>Sold out</small>' : v.lowStock ? `<small>Only ${esc(v.lowStock)} left</small>` : ''}</button>`).join('')}</div></fieldset>
+      ${firstChoice ? '<button class="btn wide" type="button" data-add-product>Add to cart</button>' : `<button class="btn wide" type="button" disabled>Sold out</button><a class="btn outline wide notify-link" href="${waLink(`Hi! Please let me know when ${activeProduct.name} is back in stock.`)}" target="_blank" rel="noopener">Ask about restock on WhatsApp</a>`}
     </div>
   </div>`;
 }
@@ -470,7 +470,7 @@ function orderPageHtml(order, ref) {
   }
   if (status === 'failed' || status === 'cancelled') {
     const paidAnyway = order.paymentStatus === 'paid';
-    return `<p class="order-ref">Order <strong>${esc(reference)}</strong></p><h1>${paidAnyway ? 'This order was <em>cancelled.</em>' : 'Payment didn’t go <em>through.</em>'}</h1><p>${paidAnyway ? 'Your refund is being arranged. We’ll contact you with the details.' : 'No money was taken for this order. Your bag is still saved — you can try again, or choose a different payment method.'}</p><div class="order-actions"><a class="btn" href="/shop">Back to the shop</a>${help}</div>`;
+    return `<p class="order-ref">Order <strong>${esc(reference)}</strong></p><h1>${paidAnyway ? 'This order was <em>cancelled.</em>' : 'Payment didn’t go <em>through.</em>'}</h1><p>${paidAnyway ? 'Your refund is being arranged. We’ll contact you with the details.' : 'No money was taken for this order. Your cart is still saved — you can try again, or choose a different payment method.'}</p><div class="order-actions"><a class="btn" href="/shop">Back to the shop</a>${help}</div>`;
   }
   const current = ORDER_STEPS.indexOf(status);
   const c = order.customer || {};
@@ -504,7 +504,7 @@ function renderOrderPage() {
     if (!box) return;
     box.innerHTML = orderPageHtml(order, ref);
     if (order.status === 'pending_payment') setTimeout(() => { const slow = document.querySelector('[data-order-slow]'); if (slow && Date.now() - started > 45000) slow.hidden = false; }, 46000);
-    if (order.status && order.status !== lastStatus && ORDER_STEPS.includes(order.status)) renderCart(); // the webhook empties the bag on payment
+    if (order.status && order.status !== lastStatus && ORDER_STEPS.includes(order.status)) renderCart(); // the webhook empties the cart on payment
     lastStatus = order.status;
   });
 }
@@ -607,7 +607,7 @@ function wireEvents() {
       const variant = document.querySelector('[data-variant].selected')?.dataset.variant;
       await store.addToCart({ productId: activeProduct.id, variant });
       await renderCart(); toggleCart(true);
-      return toast(`${activeProduct.name} is in your bag.`);
+      return toast(`${activeProduct.name} added to your cart.`);
     }
 
     const change = event.target.closest('[data-line-change]');
@@ -620,7 +620,7 @@ function wireEvents() {
 
     if (event.target.closest('[data-open-checkout]')) {
       const { lines } = await store.getCart();
-      if (!lines.length) return toast('Add a piece to your bag before checking out.');
+      if (!lines.length) return toast('Your cart is empty. Add a product first.');
       toggleCart(false);
       renderCheckoutSummary();
       return document.querySelector('[data-checkout-dialog]').showModal();
@@ -631,18 +631,18 @@ function wireEvents() {
     if (event.target.matches('[data-checkout-form]')) {
       event.preventDefault();
       const form = new FormData(event.target); const submit = event.target.querySelector('button[type="submit"]');
-      submit.disabled = true; submit.textContent = 'Starting secure payment…';
+      submit.disabled = true; submit.textContent = 'Opening payment page…';
       try {
         const result = await store.createCheckout({ customer: { name: form.get('name'), phone: form.get('phone'), deliveryPreference: form.get('deliveryPreference'), deliveryAddress: form.get('deliveryAddress'), deliveryZone: form.get('deliveryZone') || '' } });
         if (result.checkoutUrl) { window.location.assign(result.checkoutUrl); return; }
-        toast('Checkout is being connected. Your bag is saved on this device for now.');
+        toast('Checkout is being connected. Your cart is saved on this device for now.');
       } catch (error) {
         // Our checkout function returns customer-ready messages (sold out, invalid phone…);
         // anything else (network, outage) gets a friendly fallback instead of e.g. "internal".
         const ours = typeof error?.code === 'string' && !['functions/internal', 'functions/unknown', 'functions/not-found'].includes(error.code);
         toast(ours && error.message ? error.message : 'We could not start payment right now. Please try again in a moment, or message us on WhatsApp.');
       } finally {
-        submit.disabled = false; submit.textContent = 'Continue to payment';
+        submit.disabled = false; submit.textContent = 'Pay now';
       }
     }
     if (event.target.matches('[data-account-form]')) {

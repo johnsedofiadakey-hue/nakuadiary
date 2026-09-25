@@ -1,4 +1,4 @@
-// createCheckout: validates the bag, prices it from Firestore, reserves stock
+// createCheckout: validates the cart, prices it from Firestore, reserves stock
 // and writes an immutable order snapshot in ONE transaction, then opens a
 // Paystack transaction whose reference is the order id. The browser only
 // ever chooses which product/variant/quantity — never price or totals.
@@ -14,16 +14,16 @@ const ID_RE = /^[A-Za-z0-9_-]{1,120}$/;
 const DELIVERY_PREFERENCES = new Set(['Delivery', 'Pickup']);
 const MAX_OPEN_CHECKOUTS = 5;
 
-/** Validates and merges bag lines. Throws invalid-argument on anything malformed. */
+/** Validates and merges cart lines. Throws invalid-argument on anything malformed. */
 function parseLines(lines) {
   if (!Array.isArray(lines) || lines.length === 0 || lines.length > MAX_LINES) {
-    throw new HttpsError('invalid-argument', 'Your bag is empty or has too many items.');
+    throw new HttpsError('invalid-argument', 'Your cart is empty or has too many items.');
   }
   const merged = new Map();
   for (const raw of lines) {
     const { productId, variantId, quantity } = raw || {};
     if (!ID_RE.test(productId || '') || !ID_RE.test(variantId || '') || !Number.isInteger(quantity) || quantity < 1 || quantity > MAX_QUANTITY) {
-      throw new HttpsError('invalid-argument', 'One of the items in your bag is not valid. Please remove it and try again.');
+      throw new HttpsError('invalid-argument', 'One of the items in your cart is not valid. Please remove it and try again.');
     }
     const key = `${productId}::${variantId}`;
     const total = (merged.get(key)?.quantity || 0) + quantity;
@@ -94,7 +94,7 @@ async function createCheckout(request, { db, secretKey, allowedOrigins, enforceA
     const products = await readProducts(tx, db, lines);
     const snapshotLines = lines.map((line) => {
       const product = products.get(line.productId)?.data;
-      if (!product || product.active !== true) throw new HttpsError('failed-precondition', 'One of the items in your bag is no longer available. Please remove it and try again.');
+      if (!product || product.active !== true) throw new HttpsError('failed-precondition', 'One of the items in your cart is no longer available. Please remove it and try again.');
       const variant = (product.variants || []).find((v) => v.id === line.variantId);
       if (!variant || variant.available === false) throw new HttpsError('failed-precondition', `The selected option for ${product.name} is no longer available.`);
       if (accountType === 'wholesale') {
@@ -123,7 +123,7 @@ async function createCheckout(request, { db, secretKey, allowedOrigins, enforceA
       const line = snapshotLines.find((l) => l.productId === short.productId && l.variantId === short.variantId);
       throw new HttpsError('failed-precondition', short.available > 0
         ? `Only ${short.available} left of ${line?.title || 'one item'}. Please reduce the quantity.`
-        : `${line?.title || 'One item'} is sold out. Please remove it from your bag.`);
+        : `${line?.title || 'One item'} is sold out. Please remove it from your cart.`);
     }
 
     const subtotal = roundMoney(snapshotLines.reduce((sum, l) => sum + l.lineTotal, 0));

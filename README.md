@@ -56,7 +56,7 @@ Visit `/admin` on your deployed site (or `http://localhost:PORT/admin` locally) 
 - **Orders** — every order with its customer, delivery details, item photos, Paystack confirmation, full status timeline (who/when) and customer-SMS status. Move paid orders through `processing → dispatched → delivered` (pickup can go straight to delivered), or cancel — which returns stock and flags a manual Paystack refund if it was paid.
 - **Customers** — a running list built automatically from checkout (retail, keyed by phone) and wholesale accounts you create here. Creating a wholesale account shows a one-time temporary password to relay to the customer yourself (WhatsApp/SMS) — the system never emails or stores it.
 - **Homepage** — edit every piece of homepage text, upload the hero photo, floating logo card and optional category-tile photos straight from your phone or computer, and show/hide each section. Changes go live on save.
-- **Settings** — business name and logo, WhatsApp number and contact email (used by every WhatsApp/email button), social links, an announcement bar, the bag's delivery note, footer options, brand colours, and the homepage's Google/share title, description and image.
+- **Settings** — business name and logo, WhatsApp number and contact email (used by every WhatsApp/email button), social links, an announcement bar, the cart's delivery note, footer options, brand colours, and the homepage's Google/share title, description and image.
 
 ## For Claude: backend contract
 

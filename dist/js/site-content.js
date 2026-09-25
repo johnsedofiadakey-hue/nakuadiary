@@ -108,7 +108,7 @@ export const DEFAULT_HOME = {
     title: 'Shop in three steps.',
     items: [
       { title: 'Choose your texture', body: 'Wigs, bundles, extensions or accessories.' },
-      { title: 'Select your length', body: 'See the GHS price before you add it to your bag.' },
+      { title: 'Select your length', body: 'See the GHS price before you add it to your cart.' },
       { title: 'Check out as a guest', body: 'Enter your delivery details, then pay by Mobile Money or card.' },
     ],
   },

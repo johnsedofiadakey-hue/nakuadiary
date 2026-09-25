@@ -6,7 +6,7 @@ Backend code: `functions/` (Node 22, `firebase-functions` v7). Data contract: [`
 
 | Function | Trigger | Secrets | Purpose |
 |---|---|---|---|
-| `createCheckout` | callable (storefront) | `PAYSTACK_SECRET_KEY` | Validate bag, price from Firestore, reserve stock, snapshot order, open Paystack checkout |
+| `createCheckout` | callable (storefront) | `PAYSTACK_SECRET_KEY` | Validate cart, price from Firestore, reserve stock, snapshot order, open Paystack checkout |
 | `paystackWebhook` | HTTPS (Paystack) | `PAYSTACK_SECRET_KEY` | Signature check → de-dupe → `verify` with Paystack → mark paid/failed |
 | `expireStockHolds` | every 15 min | `PAYSTACK_SECRET_KEY` | Settle (if Paystack says paid) or release checkouts whose 60-min hold expired |
 | `sendOrderSms` | `smsOutbox/{id}` written | `MNOTIFY_API_KEY` | Send one queued SMS through MNotify |
