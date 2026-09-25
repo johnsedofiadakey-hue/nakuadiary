@@ -367,7 +367,7 @@ export async function updateOrderStatus({ orderId, status, note }) {
 export async function listOrderSms(orderId) {
   const { db, fsMod } = await loadSdk();
   const snap = await fsMod.getDocs(fsMod.query(fsMod.collection(db, 'smsOutbox'), fsMod.where('orderId', '==', orderId)));
-  const order = ['paid', 'processing', 'dispatched', 'delivered'];
+  const order = ['paid', 'owner_paid', 'processing', 'dispatched', 'delivered'];
   return snap.docs.map((d) => d.data()).sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
 }
 

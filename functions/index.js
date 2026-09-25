@@ -26,11 +26,16 @@ const messaging = getMessaging();
 
 setGlobalOptions({ region: config.REGION, maxInstances: 10 });
 
+// Callables must be reachable from the browser; each one authorises the caller
+// itself (requireAdmin / requireAuth). Stated explicitly so every deploy
+// re-applies it — the default is only applied when a function is first created.
+const CALLABLE = { invoker: 'public' };
+
 // Payment functions are skipped while functions/PAYMENTS_DISABLED exists — see src/config.js.
 if (config.PAYMENTS_ENABLED) {
   // ---- Storefront --------------------------------------------------------------
 
-  exports.createCheckout = onCall({ secrets: [config.PAYSTACK_SECRET_KEY], timeoutSeconds: 30 }, (request) => createCheckout(request, {
+  exports.createCheckout = onCall({ ...CALLABLE, secrets: [config.PAYSTACK_SECRET_KEY], timeoutSeconds: 30 }, (request) => createCheckout(request, {
     db,
     secretKey: config.PAYSTACK_SECRET_KEY.value(),
     allowedOrigins: config.CHECKOUT_ALLOWED_ORIGINS.value(),
@@ -76,7 +81,7 @@ exports.notifyAdminsOnPaidOrder = onDocumentWritten({ document: 'orders/{orderId
   await push.notifyAdminsOfPaidOrder(db, messaging, event.params.orderId, after);
 });
 
-exports.sendTestPush = onCall(async (request) => {
+exports.sendTestPush = onCall(CALLABLE, async (request) => {
   const uid = requireAdmin(request);
   return push.sendTestPush(db, messaging, uid);
 });
@@ -84,7 +89,7 @@ exports.sendTestPush = onCall(async (request) => {
 // ---- Admin -----------------------------------------------------------------------
 
 /** Admin "Send a test text" (Notifications screen). */
-exports.sendTestSms = onCall({ secrets: [config.MNOTIFY_API_KEY] }, (request) => {
+exports.sendTestSms = onCall({ ...CALLABLE, secrets: [config.MNOTIFY_API_KEY] }, (request) => {
   const uid = requireAdmin(request);
   return sendTestSms(db, {
     uid,
@@ -95,6 +100,6 @@ exports.sendTestSms = onCall({ secrets: [config.MNOTIFY_API_KEY] }, (request) =>
   });
 });
 
-exports.updateOrderStatus = onCall((request) => admin.updateOrderStatus(request, { db }));
-exports.resendOrderSms = onCall((request) => admin.resendOrderSms(request, { db }));
-exports.createWholesaleAccount = onCall((request) => admin.createWholesaleAccount(request, { db, auth }));
+exports.updateOrderStatus = onCall(CALLABLE, (request) => admin.updateOrderStatus(request, { db }));
+exports.resendOrderSms = onCall(CALLABLE, (request) => admin.resendOrderSms(request, { db }));
+exports.createWholesaleAccount = onCall(CALLABLE, (request) => admin.createWholesaleAccount(request, { db, auth }));

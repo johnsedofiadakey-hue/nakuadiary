@@ -863,7 +863,10 @@ function orderAlertsHtml(order) {
 function smsHtml(messages) {
   if (!messages) return '<p class="muted">Loading…</p>';
   if (!messages.length) return '<p class="muted">No customer texts for this order yet.</p>';
-  return `<ul class="sms-list">${messages.map((m) => `<li><span><strong>${esc(STATUS_LABEL[m.status] || m.status)}</strong> text to ${esc(m.to || 'customer')}</span><span class="sms-state sms-${esc(m.state)}">${esc(SMS_LABEL[m.state] || m.state)}${m.error?.message ? ` — ${esc(m.error.message)}` : ''}</span>${['failed', 'skipped', 'unknown', 'sending', 'sent'].includes(m.state) ? `<button type="button" class="link-button" data-resend-sms="${esc(m.status)}" data-sms-state="${esc(m.state)}">${m.state === 'sent' ? 'Send again' : 'Resend'}</button>` : ''}</li>`).join('')}</ul>`;
+  const SKIP_REASON = { no_owner_phone: 'Not sent — add your number in Notifications', sms_disabled: 'Not sent (texting was off)', order_missing: 'Not sent', no_template: 'Not sent (no message wording)' };
+  const title = (m) => (m.audience === 'owner' || String(m.status).startsWith('owner_') ? '<strong>New-order alert</strong> to you' : `<strong>${esc(STATUS_LABEL[m.status] || m.status)}</strong> text to ${esc(m.to || 'customer')}`);
+  const stateText = (m) => (m.state === 'skipped' && SKIP_REASON[m.reason] ? SKIP_REASON[m.reason] : SMS_LABEL[m.state] || m.state);
+  return `<ul class="sms-list">${messages.map((m) => `<li><span>${title(m)}</span><span class="sms-state sms-${esc(m.state)}">${esc(stateText(m))}${m.error?.message ? ` — ${esc(m.error.message)}` : ''}</span>${['failed', 'skipped', 'unknown', 'sending', 'sent'].includes(m.state) ? `<button type="button" class="link-button" data-resend-sms="${esc(m.status)}" data-sms-state="${esc(m.state)}">${m.state === 'sent' ? 'Send again' : 'Resend'}</button>` : ''}</li>`).join('')}</ul>`;
 }
 
 function orderDrawerHtml(order) {
