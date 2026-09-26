@@ -194,7 +194,20 @@ export const GUIDE = [
     summary: 'Words, photos, contact details and more.',
     body: `
       <h3>Homepage</h3>
-      <p><strong>More → Homepage</strong> lets you change every heading, paragraph, button and photo on the homepage. Each section has a <strong>Show</strong> switch to hide it. Wrap a word in <code>*asterisks*</code> to make it appear in the pink handwriting style. Tap <strong>Save changes</strong> — then <strong>View site</strong> to check it.</p>
+      <p><strong>More → Homepage</strong> lets you change every heading, paragraph, button and photo on the homepage — including:</p>
+      <ul class="guide-list">
+        <li><strong>Shop by category</strong> — the name, short description and photo of each category tile. A new name also appears on the shop page’s filter buttons.</li>
+        <li><strong>How it works</strong> — the three numbered steps (e.g. “Choose your texture — Wigs, bundles, extensions or accessories”).</li>
+      </ul>
+      ${steps([
+        'Tap <strong>More → Homepage</strong>.',
+        'Scroll to the section you want (each one is a white card with its title at the top).',
+        'Change the words or tap <strong>Upload photo</strong>.',
+        'Tap <strong>Save changes</strong> (top of the page on a computer, bottom of the screen on a phone).',
+        'Tap <strong>View site</strong> and refresh to check it.',
+      ])}
+      <p>The four categories themselves (Wigs, Bundles, Extensions, Accessories) are fixed — you can rename them, but not add new ones. To group products by texture or style, use <a href="#/help/products">tags</a> instead.</p>
+      <p> Each section has a <strong>Show</strong> switch to hide it. Wrap a word in <code>*asterisks*</code> to make it appear in the pink handwriting style. Tap <strong>Save changes</strong> — then <strong>View site</strong> to check it.</p>
       <h3>Settings</h3>
       <ul class="guide-list">
         <li><strong>Brand</strong> — business name and logo.</li>

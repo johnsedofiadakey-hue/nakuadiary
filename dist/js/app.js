@@ -311,6 +311,12 @@ function setupHomeReveals(main) {
 
 // ---- Page: shop --------------------------------------------------------
 
+/** Category names as edited in Admin → Homepage → Shop by category (falls back to the built-in names). */
+function shopCategories() {
+  const tiles = site.home.categories?.tiles || [];
+  return categories.map((c) => ({ id: c.id, label: tiles.find((t) => t.id === c.id)?.label?.trim() || c.label }));
+}
+
 async function renderShop() {
   const params = new URLSearchParams(location.search);
   activeCategory = params.get('category') || 'all';
@@ -322,7 +328,7 @@ async function renderShop() {
     <div class="toolbar">
       <div class="filters" data-filters>
         <button type="button" data-category="all" class="${activeCategory === 'all' ? 'is-active' : ''}">All hair</button>
-        ${categories.map((c) => `<button type="button" data-category="${c.id}" class="${activeCategory === c.id ? 'is-active' : ''}">${c.label}</button>`).join('')}
+        ${shopCategories().map((c) => `<button type="button" data-category="${esc(c.id)}" class="${activeCategory === c.id ? 'is-active' : ''}">${esc(c.label)}</button>`).join('')}
       </div>
       <input class="search-input" type="search" placeholder="Search products…" data-search />
     </div>
