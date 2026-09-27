@@ -104,7 +104,7 @@ test('storage: public read of product/site images, admin-only image uploads', as
   await assertFails(uploadBytes(ref(adminStorage, 'site/big.png'), new Uint8Array(8 * 1024 * 1024), { contentType: 'image/png' }));
   await assertSucceeds(uploadBytes(ref(adminStorage, 'site/hero.mp4'), new Uint8Array(1024), { contentType: 'video/mp4' }));
   await assertFails(uploadBytes(ref(userStorage, 'site/hero.mp4'), new Uint8Array(1024), { contentType: 'video/mp4' }));
-  await assertFails(uploadBytes(ref(adminStorage, 'site/huge.mp4'), new Uint8Array(40 * 1024 * 1024), { contentType: 'video/mp4' }));
+  await assertFails(uploadBytes(ref(adminStorage, 'site/huge.mp4'), new Uint8Array(8 * 1024 * 1024), { contentType: 'video/mp4' }));
   await assertFails(uploadBytes(ref(adminStorage, 'products/p1/clip.mp4'), new Uint8Array(1024), { contentType: 'video/mp4' }));
 });
 

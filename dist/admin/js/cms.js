@@ -108,7 +108,7 @@ export function homepageViewHtml(home) {
         <div>
           ${imageField('hero.image', 'Hero photo (mobile)', hero.image, { hint: 'Portrait photos work best (4:5). This loads first on phones.', defaultUrl: DEFAULT_HOME.hero.image.url, wide: true })}
           ${imageField('hero.desktopImage', 'Hero photo (desktop)', hero.desktopImage, { hint: 'Wide images work best (21:9). This prevents a portrait photo from being cropped on large screens.', defaultUrl: DEFAULT_HOME.hero.desktopImage.url, wide: true })}
-          ${textField('hero.videoUrl', 'Hero video link', hero.videoUrl || '', { hint: 'Optional. A short, silent MP4 (under 40 MB, ideally under 8 MB). Upload it below or paste a link; clear the box to remove it. The photo above stays as the fast-loading fallback.' })}
+          ${textField('hero.videoUrl', 'Hero video link', hero.videoUrl || '', { hint: 'Optional. A short, silent MP4 under 8 MB (6–10 seconds at 720p). Shown on computers and tablets only — phones see the photo, which saves customers’ data. Upload it below or paste a link; clear the box to remove it. The photo above stays as the fast-loading fallback.' })}
           <div class="cms-image-actions video-actions"><label class="btn secondary upload-button">Upload video<input type="file" accept="video/mp4" data-cms-video-upload /></label><small class="cms-upload-status" data-cms-video-status></small></div>
           ${toggleField('hero.showLogoPanel', 'Show the floating logo card on the photo', hero.showLogoPanel)}
           ${imageField('hero.logoPanelImage', 'Floating logo card', hero.logoPanelImage, { defaultUrl: DEFAULT_HOME.hero.logoPanelImage.url })}

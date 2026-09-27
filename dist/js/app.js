@@ -237,7 +237,10 @@ function syncDeliveryAddressField(select) {
 function heroHtml(hero) {
   const heroImage = imageUrl(hero.image, DEFAULT_HOME.hero.image.url);
   const heroDesktopImage = imageUrl(hero.desktopImage, heroImage);
-  const heroVideo = safeHref(hero.videoUrl, '');
+  // Video only on larger screens and never in data-saver mode: phones get the
+  // (much lighter) poster photo, which keeps bandwidth — and hosting cost — down.
+  const videoAllowed = window.matchMedia('(min-width: 701px)').matches && !navigator.connection?.saveData;
+  const heroVideo = videoAllowed ? safeHref(hero.videoUrl, '') : '';
   const panelImage = imageUrl(hero.logoPanelImage, '');
   const ctas = [[hero.primaryCta, 'btn'], [hero.secondaryCta, 'btn outline']].filter(([cta]) => cta.label.trim());
   return `<section class="hero hero-cinematic">

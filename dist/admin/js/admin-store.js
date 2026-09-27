@@ -229,13 +229,27 @@ const UPLOADABLE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 const canvasToBlob = (canvas, type, quality) => new Promise((resolve) => canvas.toBlob(resolve, type, quality));
 
+/** True if any pixel is (partly) see-through — e.g. a logo. Samples a 64px copy, so it's cheap. */
+function hasTransparency(canvas) {
+  const w = Math.min(canvas.width, 64);
+  const h = Math.min(canvas.height, 64);
+  const sample = document.createElement('canvas');
+  sample.width = w; sample.height = h;
+  const ctx = sample.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(canvas, 0, 0, w, h);
+  const { data } = ctx.getImageData(0, 0, w, h);
+  for (let i = 3; i < data.length; i += 4) if (data[i] < 250) return true;
+  return false;
+}
+
 /**
- * Resizes large photos (longest edge `maxEdge`) and re-encodes them as WebP
- * so a 6 MB phone photo lands as a few hundred KB. PNGs keep transparency
- * (logos); browsers that can't encode WebP fall back to JPEG/PNG. Small,
- * already-web-friendly files are uploaded untouched.
+ * Shrinks photos before upload so the shop stays fast and cheap to serve:
+ * longest edge `maxEdge`, WebP where the browser can encode it, otherwise
+ * JPEG — PNG only when the image really has transparency (logos). iPhone
+ * Safari can't encode WebP, and falling back to PNG made 3 MB+ photos, so
+ * that path now produces JPEG. Small, already-compressed files pass through.
  */
-async function optimiseImage(file, { maxEdge = 2000, quality = 0.86 } = {}) {
+async function optimiseImage(file, { maxEdge = 1600, quality = 0.82 } = {}) {
   if (!file) throw new Error('Choose an image first.');
   if (!file.type.startsWith('image/') || file.type === 'image/svg+xml') throw new Error('Choose a photo (JPG, PNG, WebP or a phone photo).');
   if (file.size > MAX_SOURCE_BYTES) throw new Error('That photo is over 25 MB — choose a smaller one.');
@@ -244,11 +258,12 @@ async function optimiseImage(file, { maxEdge = 2000, quality = 0.86 } = {}) {
   try {
     bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
   } catch {
-    if (UPLOADABLE_TYPES.includes(file.type) && file.size < MAX_UPLOAD_BYTES) return file;
+    if (UPLOADABLE_TYPES.includes(file.type) && file.size < 600 * 1024) return file;
     throw new Error('This photo format isn’t supported here — save it as JPG or PNG and try again.');
   }
   const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
-  if (scale === 1 && UPLOADABLE_TYPES.includes(file.type) && file.size < 1.5 * 1024 * 1024) { bitmap.close(); return file; }
+  const alreadySmall = (['image/jpeg', 'image/webp'].includes(file.type) && file.size < 400 * 1024) || (file.type === 'image/png' && file.size < 150 * 1024);
+  if (scale === 1 && alreadySmall) { bitmap.close(); return file; }
 
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(bitmap.width * scale);
@@ -256,8 +271,11 @@ async function optimiseImage(file, { maxEdge = 2000, quality = 0.86 } = {}) {
   canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close();
 
+  const transparent = file.type !== 'image/jpeg' && hasTransparency(canvas);
   let blob = await canvasToBlob(canvas, 'image/webp', quality);
-  if (!blob || blob.type !== 'image/webp') blob = await canvasToBlob(canvas, file.type === 'image/png' ? 'image/png' : 'image/jpeg', quality);
+  if (!blob || blob.type !== 'image/webp') {
+    blob = transparent ? await canvasToBlob(canvas, 'image/png') : await canvasToBlob(canvas, 'image/jpeg', quality);
+  }
   if (!blob) throw new Error('Could not process this photo.');
   if (blob.size >= MAX_UPLOAD_BYTES) throw new Error('This photo is still over 8 MB after resizing — try a smaller one.');
   const ext = { 'image/webp': 'webp', 'image/png': 'png', 'image/jpeg': 'jpg' }[blob.type];
@@ -265,8 +283,8 @@ async function optimiseImage(file, { maxEdge = 2000, quality = 0.86 } = {}) {
   return new File([blob], `${base}.${ext}`, { type: blob.type });
 }
 
-async function uploadImage(file, folder) {
-  const prepared = await optimiseImage(file);
+async function uploadImage(file, folder, options) {
+  const prepared = await optimiseImage(file, options);
   const { storage, storageMod } = await loadSdk();
   const safeName = (prepared.name || 'photo').toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
   const target = storageMod.ref(storage, `${folder}/${Date.now()}-${safeName || 'photo'}`);
@@ -277,14 +295,14 @@ async function uploadImage(file, folder) {
 /** Uploads a public-facing product photo. Storage rules require `admin: true`
  * on the signed-in user's custom claims; public visitors cannot upload files. */
 export async function uploadProductImage({ file, productId }) {
-  return uploadImage(file, `products/${slugify(productId) || 'draft'}`);
+  return uploadImage(file, `products/${slugify(productId) || 'draft'}`, { maxEdge: 1600 });
 }
 
-/** Uploads the optional hero video (MP4 only; storage.rules caps it at 40 MB). */
+/** Uploads the optional hero video (MP4 only; storage.rules caps it at 8 MB — it autoplays for every desktop visitor). */
 export async function uploadSiteVideo({ file }) {
   if (!file) throw new Error('Choose a video first.');
   if (file.type !== 'video/mp4') throw new Error('Use an MP4 video.');
-  if (file.size >= 40 * 1024 * 1024) throw new Error('Keep the video under 40 MB — a 6–10 second loop is plenty.');
+  if (file.size >= 8 * 1024 * 1024) throw new Error('Keep the video under 8 MB — a short 6–10 second loop, exported at 720p, is plenty.');
   const { storage, storageMod } = await loadSdk();
   const safeName = (file.name || 'hero').toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'hero.mp4';
   const target = storageMod.ref(storage, `site/${Date.now()}-${safeName}`);
@@ -294,7 +312,7 @@ export async function uploadSiteVideo({ file }) {
 
 /** Uploads a homepage/branding image (hero, logo, category tiles, share image). */
 export async function uploadSiteImage({ file }) {
-  return uploadImage(file, 'site');
+  return uploadImage(file, 'site', { maxEdge: 2000 }); // hero images are shown larger
 }
 
 export { CATEGORIES };
