@@ -25,6 +25,10 @@ export const DEFAULT_SETTINGS = {
   },
   shop: {
     deliveryNote: 'Delivery arrangements are confirmed before your order is dispatched.',
+    // Admin → Settings → "Pause the shop". While paused the site stays up but
+    // nobody can add to cart or pay; functions/src/checkout.js enforces it too.
+    paused: false,
+    pausedMessage: 'We’re taking a short break and not taking orders right now. Message us on WhatsApp and we’ll help as soon as we’re back.',
   },
   // Checkout delivery pricing. The server (functions/src/delivery.js) applies
   // the same rules — this copy is only for showing the fee before payment.

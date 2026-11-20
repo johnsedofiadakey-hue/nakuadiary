@@ -233,6 +233,22 @@ export const GUIDE = [
       <p>For <strong>Fee by area</strong>, type one area per line like <code>East Legon | 30</code>. Use <strong>Free delivery over</strong> to make delivery free above an order amount.</p>`,
   },
   {
+    id: 'pause',
+    title: 'Pausing the shop',
+    summary: 'Stop new orders for a while without taking the website down.',
+    body: `
+      <p>Going on holiday, waiting for stock, or something isn’t right? Pause the shop. The website stays open so customers can still look around and message you on WhatsApp, but <strong>nobody can add to cart or pay</strong> until you open it again.</p>
+      ${steps([
+        `<strong>More → Settings</strong>. ${open('settings', 'Open Settings')}`,
+        'At the top, under <strong>Pause the shop</strong>, tick <strong>Shop is paused</strong>.',
+        'Change the message if you like — e.g. “Back on Monday 2 December”. Customers see it at the top of every page.',
+        'Tap <strong>Save changes</strong>. It works straight away.',
+      ])}
+      <p>While paused, your <strong>Home</strong> page shows a dark reminder bar. Orders that were already paid are not affected — keep preparing and delivering them as normal, and customers still get their texts.</p>
+      ${next('To open again, untick <strong>Shop is paused</strong> and tap <strong>Save changes</strong>.')}
+      ${tip('To hide just one product instead, edit it and untick <strong>Visible on the website</strong>.')}`,
+  },
+  {
     id: 'notifications',
     title: 'Customer texts (SMS)',
     summary: 'What customers receive and how to change the wording.',

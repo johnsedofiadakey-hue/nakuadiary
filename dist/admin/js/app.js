@@ -300,6 +300,7 @@ async function homeViewHtml() {
 
   const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening';
   return `<div class="view-head"><div><h1>${greeting}</h1><p>${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</p></div></div>
+    ${siteSettings.shop?.paused === true ? '<div class="paused-banner" role="status"><p><strong>Your shop is paused.</strong> Customers can browse but can’t order or pay.</p><a class="btn" href="#/settings">Open the shop</a></div>' : ''}
     <div class="quick-actions">
       <a class="quick-action primary" href="#/products/new">${icon('products')}<span>Add product</span></a>
       <a class="quick-action" href="#/stock">${icon('stock')}<span>Update stock</span></a>

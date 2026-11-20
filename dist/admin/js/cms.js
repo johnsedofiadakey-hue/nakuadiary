@@ -181,6 +181,11 @@ export function settingsViewHtml(settings) {
   return `<form class="cms-form" data-cms-form="settings" novalidate>
     ${saveBar('Settings', 'Brand, contact details and site-wide options.')}
 
+    ${card('Pause the shop', 'Stop taking orders for a while — holidays, restocking or a problem. The website stays open so customers can still browse and message you, but nobody can add to cart or pay. Orders already paid are not affected.', `
+      <label class="field checkbox pause-toggle"><input name="shop.paused" type="checkbox" data-kind="bool" ${shop.paused ? 'checked' : ''} /> <span><strong>Shop is paused</strong> — no new orders</span></label>
+      ${textField('shop.pausedMessage', 'Message customers see while paused', shop.pausedMessage, { multiline: true, hint: 'Shown at the top of every page and in place of “Add to cart”. Say when you’ll be back if you know.' })}
+      <small class="field-hint">Tap <strong>Save changes</strong> to apply. Untick and save to open the shop again — it takes effect straight away.</small>`)}
+
     ${card('Brand', 'Your name and logo across the header and footer.', `
       <div class="cms-split">
         <div>

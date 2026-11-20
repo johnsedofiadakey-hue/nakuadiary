@@ -168,3 +168,21 @@ test('delivery: malformed settings fall back safely', async () => {
   await setDelivery({ mode: 'flat', flatFee: -5 });
   assert.equal((await checkoutWith(h.customer)).order.deliveryFee, 0);
 });
+
+test('a paused shop refuses checkout, holds no stock, and reopens cleanly', async () => {
+  const f = h.fakeFetch({ '/transaction/initialize': h.paystackInitOk });
+  try {
+    const settings = h.db.collection('site').doc('settings');
+    await settings.set({ shop: { paused: true, pausedMessage: 'Back on Monday!' } });
+    await assert.rejects(createCheckout(h.callable({ lines: [line()], customer: h.customer }), opts), (err) => err.code === 'failed-precondition' && err.message === 'Back on Monday!');
+    await settings.set({ shop: { paused: true, pausedMessage: '   ' } });
+    await assert.rejects(createCheckout(h.callable({ lines: [line()], customer: h.customer }), opts), /not taking orders/);
+    assert.equal(f.calls.length, 0, 'Paystack is never called while paused');
+    assert.equal((await h.db.collection('orders').get()).size, 0);
+    assert.equal(await h.stockOf('body-wave', '16-inches'), 3);
+
+    await settings.set({ shop: { paused: false } });
+    const out = await createCheckout(h.callable({ lines: [line()], customer: h.customer }), opts);
+    assert.ok(out.checkoutUrl);
+  } finally { f.restore(); }
+});

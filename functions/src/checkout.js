@@ -76,15 +76,21 @@ async function createCheckout(request, { db, secretKey, allowedOrigins, enforceA
   const customer = parseCustomer(request.data?.customer);
   const callbackUrl = safeCallbackUrl(request.data?.callbackUrl, allowedOrigins);
 
+  // Admin → Settings → "Pause the shop". Checked on the server so a page left
+  // open (or a saved cart) can't pay while the shop is closed.
+  const settingsSnap = await db.collection('site').doc('settings').get();
+  const settingsDoc = settingsSnap.exists ? settingsSnap.data() : {};
+  if (settingsDoc.shop?.paused === true) {
+    const message = typeof settingsDoc.shop.pausedMessage === 'string' ? settingsDoc.shop.pausedMessage.trim().slice(0, 300) : '';
+    throw new HttpsError('failed-precondition', message || 'We’re not taking orders right now. Please message us on WhatsApp.');
+  }
+
   // Abuse guard: expired holds are cleared by the scheduler, so this only
   // blocks someone spinning up many live checkouts at once.
   const open = await db.collection('orders').where('buyerUid', '==', uid).where('status', '==', 'pending_payment').count().get();
   if (open.data().count >= MAX_OPEN_CHECKOUTS) {
     throw new HttpsError('resource-exhausted', 'You have several unfinished checkouts. Please complete one or try again in an hour.');
   }
-
-  const settingsSnap = await db.collection('site').doc('settings').get();
-  const settingsDoc = settingsSnap.exists ? settingsSnap.data() : {};
 
   const orderRef = db.collection('orders').doc();
   const reference = makeOrderReference();

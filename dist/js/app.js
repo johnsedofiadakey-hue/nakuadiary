@@ -2,7 +2,7 @@ import { categories } from './data.js?v=2';
 import { store } from './store.js?v=2';
 import { money } from './components/templates.js?v=2';
 import { updateSeo } from './seo.js?v=2';
-import { DEFAULT_HOME, escapeHtml as esc, richText, safeHref, isHexColour } from './site-content.js?v=2';
+import { DEFAULT_HOME, DEFAULT_SETTINGS, escapeHtml as esc, richText, safeHref, isHexColour } from './site-content.js?v=2';
 
 const app = document.querySelector('#app');
 const page = document.body.dataset.page;
@@ -54,7 +54,11 @@ function brandHtml(extraClass = '') {
   return `<a class="brand ${extraClass}" href="/" aria-label="${esc(businessName)} home"><img class="brand-mark" src="${esc(logoUrl)}" alt="" />${showWordmark ? '<span>NAKUA<em>diary</em></span>' : ''}</a>`;
 }
 
+const shopPaused = () => settings.shop.paused === true;
+const pausedMessage = () => settings.shop.pausedMessage.trim() || DEFAULT_SETTINGS.shop.pausedMessage;
+
 function announcementHtml() {
+  if (shopPaused()) return `<div class="announcement-bar shop-paused-bar" role="status"><span>${esc(pausedMessage())}</span> <a href="${waLink('Hi! I have a question about an order.')}" target="_blank" rel="noopener">WhatsApp us</a></div>`;
   const { enabled, text, link } = settings.announcement;
   if (!enabled || !text.trim()) return '';
   const href = link.trim() ? safeHref(link, '') : '';
@@ -103,7 +107,7 @@ function chromeExtrasHtml() {
     <footer>
       <p class="cart-total"><span>Subtotal</span><strong data-cart-total>${money(0)}</strong></p>
       <p class="delivery-note">${esc(settings.shop.deliveryNote)}</p>
-      <button class="btn wide" type="button" data-open-checkout>Checkout</button>
+      ${shopPaused() ? `<p class="paused-note">${esc(pausedMessage())}</p><button class="btn wide" type="button" disabled>Not taking orders right now</button>` : '<button class="btn wide" type="button" data-open-checkout>Checkout</button>'}
     </footer>
   </aside>
   <dialog class="account-dialog" data-account-dialog>
@@ -407,7 +411,7 @@ async function renderProductPage() {
       <ul>${productDetails(activeProduct).map((d) => `<li>${d}</li>`).join('')}</ul>
       ${activeProduct.tags?.length ? `<p class="product-tags">${activeProduct.tags.map((tag) => `<a href="/shop?tag=${encodeURIComponent(tag)}">${esc(tag)}</a>`).join('')}</p>` : ''}
       <fieldset><legend>Choose a length</legend><div class="variant-options">${choices.map((v) => `<button type="button" data-variant="${esc(v.label)}" data-price="${esc(v.price)}" class="${v === firstChoice ? 'selected' : ''} ${v.soldOut ? 'is-sold-out' : ''}" ${v.soldOut ? 'disabled aria-disabled="true"' : ''}>${esc(v.label)}${v.soldOut ? '<small>Sold out</small>' : v.lowStock ? `<small>Only ${esc(v.lowStock)} left</small>` : ''}</button>`).join('')}</div></fieldset>
-      ${firstChoice ? '<button class="btn wide" type="button" data-add-product>Add to cart</button>' : `<button class="btn wide" type="button" disabled>Sold out</button><a class="btn outline wide notify-link" href="${waLink(`Hi! Please let me know when ${activeProduct.name} is back in stock.`)}" target="_blank" rel="noopener">Ask about restock on WhatsApp</a>`}
+      ${shopPaused() ? `<p class="paused-note">${esc(pausedMessage())}</p><button class="btn wide" type="button" disabled>Not taking orders right now</button><a class="btn outline wide notify-link" href="${waLink(`Hi! I'm interested in ${activeProduct.name}.`)}" target="_blank" rel="noopener">Ask about it on WhatsApp</a>` : firstChoice ? '<button class="btn wide" type="button" data-add-product>Add to cart</button>' : `<button class="btn wide" type="button" disabled>Sold out</button><a class="btn outline wide notify-link" href="${waLink(`Hi! Please let me know when ${activeProduct.name} is back in stock.`)}" target="_blank" rel="noopener">Ask about restock on WhatsApp</a>`}
     </div>
   </div>`;
 }
@@ -613,6 +617,7 @@ function wireEvents() {
       return;
     }
     if (event.target.closest('[data-add-product]')) {
+      if (shopPaused()) return toast(pausedMessage());
       const variant = document.querySelector('[data-variant].selected')?.dataset.variant;
       await store.addToCart({ productId: activeProduct.id, variant });
       await renderCart(); toggleCart(true);
@@ -628,6 +633,7 @@ function wireEvents() {
     }
 
     if (event.target.closest('[data-open-checkout]')) {
+      if (shopPaused()) return toast(pausedMessage());
       const { lines } = await store.getCart();
       if (!lines.length) return toast('Your cart is empty. Add a product first.');
       toggleCart(false);
