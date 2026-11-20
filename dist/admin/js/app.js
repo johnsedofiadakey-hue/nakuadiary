@@ -313,7 +313,7 @@ async function homeViewHtml() {
       <a class="stat ${lowCount ? 'stat-warn' : ''}" href="#/stock"><small>Stock</small><strong>${lowCount ? `${lowCount} low` : 'All good'}</strong><span>${outCount ? `${outCount} sold out` : 'Nothing sold out'}</span></a>
     </div>
     <section class="panel"><header class="panel-head"><h2>To do now</h2><a href="#/orders">All orders →</a></header>
-      ${todo.length ? todo.join('') : '<p class="empty-inline">🎉 Nothing waiting. New paid orders will appear here — and on your phone if <a href="#/notifications">order alerts</a> are on.</p>'}
+      ${todo.length ? todo.join('') : '<p class="empty-inline">Nothing waiting. New paid orders will appear here — and on your phone if <a href="#/notifications">order alerts</a> are on.</p>'}
     </section>
     ${doneCount < checklist.length ? `<section class="panel checklist"><header class="panel-head"><h2>Setup checklist</h2><span class="progress-pill">${doneCount} of ${checklist.length} done</span></header>
       <div class="progress-bar"><span style="width:${Math.round((doneCount / checklist.length) * 100)}%"></span></div>

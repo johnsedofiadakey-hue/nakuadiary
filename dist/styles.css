@@ -185,7 +185,7 @@ legend{font:600 .7rem var(--sans);text-transform:uppercase;letter-spacing:.06em;
 .wholesale-card p{color:var(--soft);font-size:.85rem;margin:0 0 1.4rem}
 .benefit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4rem}
 .benefit-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:1.6rem;text-align:center}
-.benefit-card .icon{font-size:1.6rem;margin-bottom:.6rem}
+.benefit-card .icon{display:inline-grid;place-items:center;width:3.2rem;height:3.2rem;border-radius:50%;background:var(--blush);color:var(--rose-dark);margin-bottom:.8rem}
 .benefit-card h3{font-size:1rem;margin-bottom:.4rem}
 .benefit-card p{margin:0;color:var(--soft);font-size:.82rem}
 .faq{display:flex;flex-direction:column;gap:1rem;max-width:40rem}

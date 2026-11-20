@@ -441,9 +441,9 @@ function renderWholesale() {
   <section class="section">
     <div class="section-head"><p class="eyebrow">Why wholesale with us</p><h2>Built for people who sell hair too.</h2></div>
     <div class="benefit-grid">
-      <div class="benefit-card"><div class="icon">💸</div><h3>Better margins</h3><p>Wholesale pricing across our full catalogue, applied automatically once you're signed in.</p></div>
-      <div class="benefit-card"><div class="icon">📦</div><h3>Low minimums</h3><p>Minimum order quantities are set per product, not one-size-fits-all.</p></div>
-      <div class="benefit-card"><div class="icon">🤝</div><h3>A real relationship</h3><p>Every wholesale account is set up personally, so you're never just a number.</p></div>
+      <div class="benefit-card"><div class="icon"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg></div><h3>Better margins</h3><p>Wholesale pricing across our full catalogue, applied automatically once you're signed in.</p></div>
+      <div class="benefit-card"><div class="icon"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="m3 8 9 5 9-5"/><path d="M12 13v8"/></svg></div><h3>Low minimums</h3><p>Minimum order quantities are set per product, not one-size-fits-all.</p></div>
+      <div class="benefit-card"><div class="icon"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/></svg></div><h3>A real relationship</h3><p>Every wholesale account is set up personally, so you're never just a number.</p></div>
     </div>
   </section>
   <section class="section tint">
