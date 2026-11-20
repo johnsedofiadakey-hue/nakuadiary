@@ -384,3 +384,13 @@ dialog::backdrop{background:rgba(74,53,66,.45);backdrop-filter:blur(3px)}
   .product-card .underlined{display:none}
   .home-product-grid{grid-template-columns:none;grid-auto-columns:minmax(9.5rem,44vw);gap:.7rem}
 }
+
+/* ---- Phones: category and style filters as single swipeable rows ---- */
+@media(max-width:700px){
+  .filters,.tag-filters{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch;margin-right:-1.2rem;padding-right:2.4rem;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 2.4rem),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 2.4rem),transparent)}
+  .filters::-webkit-scrollbar{display:none}
+  .filters button{flex:0 0 auto;white-space:nowrap}
+  .tag-filters{margin:-.6rem 0 1.2rem;padding-bottom:.1rem}
+  .toolbar{flex-direction:column;align-items:stretch;flex-wrap:nowrap}
+  .toolbar>.filters{min-width:0}
+}
